@@ -16,7 +16,7 @@ export const sessionExpired = () => {
   previous?.onUnauthorized();
 };
 export function mutationBlock(action: AdminAction, deactivating = false): string | null {
-  if (integration && !integration.authorize(action)) return 'Your admin session does not allow this action.';
-  if (integration && action === 'activation' && deactivating && !integration.inactiveJobsAccessible()) return 'Disabling requires access to inactive jobs so they can be enabled again.';
+  if (integration && !integration.authorize(action)) return 'Phiên quản trị (session) hiện không cho phép thao tác này.';
+  if (integration && action === 'activation' && deactivating && !integration.inactiveJobsAccessible()) return 'Cần quyền xem job đang tắt (inactive) thì mới được tắt job, để có thể bật lại.';
   return null;
 }

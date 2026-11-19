@@ -1,7 +1,7 @@
 export const dateTime = (value?: string | null) => value ? new Date(value).toLocaleString('vi-VN', { dateStyle: 'short', timeStyle: 'medium', timeZone: 'Asia/Ho_Chi_Minh' }) : '—';
 export const duration = (start?: string | null, finish?: string | null) => {
   if (!start) return '—';
-  if (!finish) return 'In progress / unknown';
+  if (!finish) return 'Đang chạy / chưa rõ';
   const seconds = Math.max(0, Math.round((new Date(finish).getTime() - new Date(start).getTime()) / 1000));
   return seconds >= 60 ? `${Math.floor(seconds / 60)}m ${seconds % 60}s` : `${seconds}s`;
 };

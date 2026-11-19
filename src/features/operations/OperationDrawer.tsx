@@ -2,16 +2,17 @@ import { useRef, useState } from 'react';
 import type { DataSource, IngestionJob } from '../dashboard/types/dto';
 import { Drawer } from '../../shared/components/Ui';
 import { mutationBlock } from '../../shared/api/access';
-import { API_BASE, requestJson, ApiError } from '../../shared/api/client';
-import { useQuery } from '@tanstack/react-query';
-import { ApiResult } from '../admin/Records';
+import { ApiError } from '../../shared/api/client';
+import { ApiResult, type Row } from '../admin/Records';
+import { submitCommand, useCommand } from '../admin/CommandTracker';
 import { safeObject } from '../../shared/utils/format';
 import { adminApi, useAdminMutation } from './api';
-import { datasetTypes, sourceTypes, licenseStatuses, operations, type CreateIngestionJobRequest, type ManualIngestionRequest, type DataSourceRequest } from './contracts';
+import { datasetTypes, sourceTypes, licenseStatuses, operations, type CreateIngestionJobRequest, type DataSourceRequest } from './contracts';
 import { buildRequest, type FormValues } from './forms';
 
 export type Operation = { kind: 'create-job' | 'manual-ingestion' | 'validate-pending' } | { kind: 'upsert-source'; source?: DataSource } | { kind: 'edit-job' | 'run-job' | 'activation'; job: IngestionJob } | { kind: 'validate-raw'; rawId: string };
-const titles: Record<Operation['kind'], string> = { 'edit-job': 'Edit Ingestion Job', 'create-job': 'Create Ingestion Job', 'manual-ingestion': 'New Manual Ingestion', 'upsert-source': 'Save Data Source', 'run-job': 'Run Job Now', activation: 'Change Job Activation', 'validate-raw': 'Run Validation', 'validate-pending': 'Validate Pending Data' };
+const titles: Record<Operation['kind'], string> = { 'edit-job': 'Sửa job lấy dữ liệu', 'create-job': 'Tạo job lấy dữ liệu', 'manual-ingestion': 'Lấy dữ liệu thủ công', 'upsert-source': 'Lưu nguồn dữ liệu', 'run-job': 'Chạy job ngay', activation: 'Bật/tắt job', 'validate-raw': 'Chạy validation', 'validate-pending': 'Validate dữ liệu chờ' };
+const commandActions = { 'run-job': 'RUN_JOB', 'manual-ingestion': 'MANUAL_INGESTION', 'validate-raw': 'VALIDATE_RAW', 'validate-pending': 'VALIDATE_PENDING' } as const;
 interface Field { key: string; label: string; options?: readonly string[]; type?: string; required?: boolean; readOnly?: boolean; hint?: string }
 
 export function OperationDrawer({ operation, sources = [], onClose, onRun }: { operation: Operation; sources?: DataSource[]; onClose: () => void; onRun: (id: string) => void }) {
@@ -25,60 +26,60 @@ export function OperationDrawer({ operation, sources = [], onClose, onRun }: { o
   const submitting = useRef(false);
   const idempotency = useRef(crypto.randomUUID());
   const [reason, setReason] = useState('');
-  const queuedAction = ['run-job', 'manual-ingestion', 'validate-raw', 'validate-pending'].includes(operation.kind);
+  // Long-running actions go through the durable command queue; only configuration writes call Java directly.
+  const queuedAction = operation.kind in commandActions;
   const mutation = useAdminMutation(async (input: unknown): Promise<unknown> => {
     if (queuedAction) {
-      const action = { 'run-job': 'RUN_JOB', 'manual-ingestion': 'MANUAL_INGESTION', 'validate-raw': 'VALIDATE_RAW', 'validate-pending': 'VALIDATE_PENDING' }[operation.kind as 'run-job'];
       const payload = operation.kind === 'run-job' ? { jobId: operation.job.id } : operation.kind === 'validate-raw' ? { rawPayloadId: operation.rawId } : input;
-      return requestJson(API_BASE, '/api/admin/console/commands', 'POST', { idempotencyKey: idempotency.current, action, reason, input: payload });
+      return submitCommand(commandActions[operation.kind as keyof typeof commandActions], payload, reason, idempotency.current);
     }
     switch (operation.kind) {
       case 'create-job': return adminApi.createJob(input as CreateIngestionJobRequest);
       case 'edit-job': return adminApi.updateJob(operation.job.id, input as CreateIngestionJobRequest);
-      case 'manual-ingestion': return adminApi.manual(input as ManualIngestionRequest);
       case 'upsert-source': return adminApi.upsertSource(input as DataSourceRequest);
-      case 'run-job': return adminApi.runJob(operation.job.id);
       case 'activation': return adminApi.activation({ jobId: operation.job.id, active: !operation.job.active });
-      case 'validate-raw': return adminApi.validateRaw(operation.rawId);
-      case 'validate-pending': return adminApi.validatePending(Number(values.limit));
     }
   });
   const deactivating = operation.kind === 'activation' && operation.job.active;
   const blocked = mutationBlock(operation.kind, deactivating);
-  const title = source ? 'Edit Data Source' : operation.kind === 'upsert-source' ? 'Add Data Source' : titles[operation.kind];
+  const title = source ? 'Sửa nguồn dữ liệu' : operation.kind === 'upsert-source' ? 'Thêm nguồn dữ liệu' : titles[operation.kind];
   const fields: Field[] = operation.kind === 'create-job' || operation.kind === 'edit-job' ? [
-    { key: 'dataSourceCode', label: 'Data Source', options: sources.map(s => s.code), required: true },
-    { key: 'code', label: 'Job Code', required: true, readOnly: !!job }, { key: 'name', label: 'Job Name', required: true },
-    { key: 'datasetType', label: 'Dataset Type', options: datasetTypes, required: true },
-    { key: 'cronExpression', label: 'Cron Expression', hint: 'Spring cron: seconds minutes hours day month weekday, evaluated in UTC. Full syntax is validated by Java.' },
-    { key: 'parameters', label: 'Parameters (JSON object)', type: 'json', required: true },
-    { key: 'maxRetries', label: 'Max Retries', type: 'number', readOnly: true, hint: 'Fixed at 10 by the Java retry policy.' },
-    { key: 'timeoutSeconds', label: 'Timeout Seconds', type: 'number', hint: 'Leave blank for the server default of 120 seconds.' },
-    { key: 'active', label: 'Active', options: ['true', 'false'], hint: 'Inactive jobs remain visible and can be enabled later.' },
+    { key: 'dataSourceCode', label: 'Nguồn dữ liệu', options: sources.map(s => s.code), required: true },
+    { key: 'code', label: 'Mã job', required: true, readOnly: !!job }, { key: 'name', label: 'Tên job', required: true },
+    { key: 'datasetType', label: 'Loại dữ liệu', options: datasetTypes, required: true },
+    { key: 'cronExpression', label: 'Biểu thức cron', hint: 'Cron Spring 6 trường: giây phút giờ ngày tháng thứ, tính theo UTC. Java kiểm tra đầy đủ cú pháp.' },
+    { key: 'parameters', label: 'Tham số (JSON object)', type: 'json', required: true },
+    { key: 'maxRetries', label: 'Retry tối đa', type: 'number', readOnly: true, hint: 'Cố định 10 theo chính sách retry của Java.' },
+    { key: 'timeoutSeconds', label: 'Timeout (giây)', type: 'number', hint: 'Để trống để dùng mặc định 120 giây của server.' },
+    { key: 'active', label: 'Đang bật', options: ['true', 'false'], hint: 'Job tắt vẫn hiển thị và có thể bật lại.' },
   ] : operation.kind === 'upsert-source' ? [
-    { key: 'code', label: 'Code', required: true, readOnly: !!source }, { key: 'name', label: 'Name', required: true },
-    { key: 'sourceType', label: 'Source Type', options: sourceTypes, required: true }, { key: 'baseUrl', label: 'Base URL', type: 'url' },
-    { key: 'provider', label: 'Provider', hint: 'Use the provider configured on Java. No credentials.' },
-    { key: 'official', label: 'Official', options: ['true', 'false'] }, { key: 'licenseStatus', label: 'License Status', options: licenseStatuses }, { key: 'active', label: 'Active', options: ['true', 'false'] },
+    { key: 'code', label: 'Mã nguồn', required: true, readOnly: !!source }, { key: 'name', label: 'Tên nguồn', required: true },
+    { key: 'sourceType', label: 'Loại nguồn', options: sourceTypes, required: true }, { key: 'baseUrl', label: 'Base URL', type: 'url' },
+    { key: 'provider', label: 'Nhà cung cấp', hint: 'Dùng provider đã cấu hình trên Java. Không nhập thông tin đăng nhập.' },
+    { key: 'official', label: 'Nguồn chính thức', options: ['true', 'false'] }, { key: 'licenseStatus', label: 'Giấy phép', options: licenseStatuses }, { key: 'active', label: 'Đang bật', options: ['true', 'false'] },
   ] : operation.kind === 'manual-ingestion' ? [
-    { key: 'operation', label: 'Operation', options: operations, required: true },
-    { key: 'dataSourceCode', label: 'Data Source', options: sources.filter(s => s.active && s.sourceType === 'API').map(s => s.code), required: true, hint: 'Only active API sources. Provider is taken from the selected source.' },
-    { key: 'symbol', label: 'Symbol' }, { key: 'startDate', label: 'Start Date', type: 'date' }, { key: 'endDate', label: 'End Date', type: 'date' },
-    { key: 'interval', label: 'Interval' }, { key: 'parameters', label: 'Additional Parameters (JSON object of strings)', type: 'json', hint: 'Financial statements require "statement"; raw proxy requires "upstream_path"; URL fetch requires "url".' },
-  ] : operation.kind === 'validate-pending' ? [{ key: 'limit', label: 'Maximum payloads to process', type: 'number', required: true, hint: 'From 1 to 100. This batch can change multiple records.' }] : [];
+    { key: 'operation', label: 'Thao tác nguồn', options: operations, required: true },
+    { key: 'dataSourceCode', label: 'Nguồn dữ liệu', options: sources.filter(s => s.active && s.sourceType === 'API').map(s => s.code), required: true, hint: 'Chỉ nguồn API đang bật. Provider lấy theo nguồn đã chọn.' },
+    { key: 'symbol', label: 'Mã chứng khoán' }, { key: 'startDate', label: 'Từ ngày', type: 'date' }, { key: 'endDate', label: 'Đến ngày', type: 'date' },
+    { key: 'interval', label: 'Chu kỳ (interval)' }, { key: 'parameters', label: 'Tham số bổ sung (JSON object, giá trị chuỗi)', type: 'json', hint: 'Báo cáo tài chính cần "statement"; raw proxy cần "upstream_path"; lấy URL cần "url".' },
+  ] : operation.kind === 'validate-pending' ? [{ key: 'limit', label: 'Số payload tối đa', type: 'number', required: true, hint: 'Từ 1 đến 100. Một lô có thể thay đổi nhiều bản ghi.' }] : [];
   const prepare = () => {
+    const nextErrors: Record<string, string> = {};
+    let nextBody: unknown;
     if (operation.kind === 'create-job' || operation.kind === 'edit-job' || operation.kind === 'manual-ingestion' || operation.kind === 'upsert-source') {
       const checked = buildRequest(operation.kind === 'edit-job' ? 'create-job' : operation.kind, values, sources, source);
-      setErrors(checked.errors);
-      if (Object.keys(checked.errors).length) return;
-      setBody(checked.body);
+      Object.assign(nextErrors, checked.errors); nextBody = checked.body;
     } else if (operation.kind === 'validate-pending') {
-      if (!Number.isInteger(Number(values.limit)) || Number(values.limit) < 1 || Number(values.limit) > 100) { setErrors({ limit: 'Enter an integer from 1 to 100.' }); return; }
-      setBody({ limit: Number(values.limit) });
-    } else if (operation.kind === 'activation') setBody({ jobId: operation.job.id, active: !operation.job.active });
-    else if (operation.kind === 'run-job') setBody({ jobId: operation.job.id, jobCode: operation.job.code, jobName: operation.job.name, dataSourceCode: operation.job.dataSourceCode });
-    else if (operation.kind === 'validate-raw') setBody({ rawPayloadId: operation.rawId });
-    if (queuedAction && !reason.trim()) { setErrors({ reason: 'Ghi rõ lý do vận hành.' }); return; }
+      const limit = Number(values.limit);
+      if (!Number.isInteger(limit) || limit < 1 || limit > 100) nextErrors.limit = 'Nhập số nguyên từ 1 đến 100.';
+      nextBody = { limit };
+    } else if (operation.kind === 'activation') nextBody = { jobId: operation.job.id, active: !operation.job.active };
+    else if (operation.kind === 'run-job') nextBody = { jobId: operation.job.id, jobCode: operation.job.code, jobName: operation.job.name, dataSourceCode: operation.job.dataSourceCode };
+    else if (operation.kind === 'validate-raw') nextBody = { rawPayloadId: operation.rawId };
+    if (queuedAction && !reason.trim()) nextErrors.reason = 'Ghi rõ lý do vận hành.';
+    setErrors(nextErrors);
+    if (Object.keys(nextErrors).length) return;
+    setBody(nextBody);
     idempotency.current = crypto.randomUUID();
     setReview(true);
   };
@@ -88,27 +89,33 @@ export function OperationDrawer({ operation, sources = [], onClose, onRun }: { o
     try { setResult(await mutation.mutateAsync(body)); } catch { /* The form stays open and the mutation error is shown. */ }
     finally { submitting.current = false; }
   };
-  const response = result && typeof result === 'object' ? result as Record<string, unknown> : undefined;
+  const response = result && typeof result === 'object' ? result as Row : undefined;
   const commandId = queuedAction && typeof response?.id === 'string' ? response.id : undefined;
-  const tracked = useQuery({ queryKey: ['admin-command', commandId], queryFn: () => requestJson<Record<string, unknown>>(API_BASE, `/api/admin/console/commands/${commandId}`), enabled: !!commandId,
-    refetchInterval: q => ['QUEUED', 'RUNNING'].includes(String(q.state.data?.status)) ? 2000 : false });
-  const runId = response?.runId || response?.ingestionRunId;
+  const tracked = useCommand(commandId);
+  const commandResult = tracked.data?.result_json as Row | undefined;
+  const runId = response?.runId || response?.ingestionRunId || commandResult?.runId;
+  const impact = operation.kind === 'run-job' || operation.kind === 'manual-ingestion' ? 'Thao tác có thể gọi dịch vụ bên ngoài, tốn tài nguyên và ghi dữ liệu. Mỗi lần xác nhận tạo một lượt chạy mới.'
+    : operation.kind === 'validate-pending' ? `Lô này có thể xử lý tới ${values.limit} payload và cập nhật kết quả validation cùng version dữ liệu.`
+    : operation.kind === 'activation' ? (deactivating ? 'Tắt job sẽ ngừng các lần chạy theo lịch. Job vẫn hiển thị và có thể bật lại.' : 'Bật job cho phép job được lên lịch và đặt lại ngân sách retry.')
+    : operation.kind === 'upsert-source' && source && source.active !== (values.active === 'true') ? 'Trạng thái bật của nguồn sẽ thay đổi và có thể ảnh hưởng việc lấy dữ liệu.'
+    : 'Yêu cầu này ghi cấu hình hoặc dữ liệu validation.';
+  const change = (key: string, value: string) => setValues({ ...values, [key]: value });
   return <Drawer title={title} onClose={() => { if (!submitting.current) onClose(); }}>
-    {result !== undefined ? <div role="status"><h3>Server response received</h3>{operation.kind === 'upsert-source' && <p>Source configuration saved. This endpoint uses upsert semantics.</p>}{Array.isArray(result) && <p>{result.length} validation results returned.</p>}<pre>{safeObject(result)}</pre>{commandId && <><p>Tác vụ chạy trên server, có thể đóng cửa sổ và theo dõi tại Điều hành tác vụ.</p>{tracked.error && <p role="alert">{tracked.error.message}</p>}<ApiResult value={tracked.data}/></>}{typeof response?.duplicateChecksum === 'boolean' && <p>Duplicate checksum reported by Java: {response.duplicateChecksum ? 'Yes' : 'No'}</p>}{typeof runId === 'string' && <button className="primary-button" onClick={() => { onClose(); onRun(runId); }}>View Run Details</button>}<button className="light-button" onClick={onClose}>Done</button></div> : <>
+    {result !== undefined ? <div role="status"><h3>Backend đã nhận yêu cầu</h3>{operation.kind === 'upsert-source' && <p>Đã lưu cấu hình nguồn (endpoint dùng cơ chế upsert).</p>}<pre>{safeObject(result)}</pre>{commandId && <><p>Tác vụ chạy trên server; có thể đóng cửa sổ và theo dõi tại “Tác vụ &amp; lịch sử” → “Tác vụ nền”.</p>{tracked.error && <p role="alert" className="state-error">{tracked.error.message}</p>}<ApiResult value={tracked.data}/></>}{typeof response?.duplicateChecksum === 'boolean' && <p>Java báo checksum trùng: {response.duplicateChecksum ? 'Có' : 'Không'}</p>}{typeof runId === 'string' && <button className="primary-button" onClick={() => { onClose(); onRun(runId); }}>Xem lượt chạy</button>}<button className="light-button" onClick={onClose}>Xong</button></div> : <>
       {blocked && <p className="operation-lock" role="status">{blocked}</p>}
       {!review ? <form className="admin-form" noValidate onSubmit={e => { e.preventDefault(); prepare(); }}>
         {fields.map(field => <div className="form-field" key={field.key}><label htmlFor={`op-${field.key}`}>{field.label}{field.required && ' *'}</label>
-          {field.options ? <select id={`op-${field.key}`} value={values[field.key]} aria-invalid={!!errors[field.key]} aria-describedby={`hint-${field.key}`} onChange={e => setValues({ ...values, [field.key]: e.target.value })}><option value="" disabled>Select…</option>{field.options.map(option => <option key={option}>{option}</option>)}</select> : field.type === 'json' ? <textarea id={`op-${field.key}`} rows={7} spellCheck={false} value={values[field.key]} aria-invalid={!!errors[field.key]} aria-describedby={`hint-${field.key}`} onChange={e => setValues({ ...values, [field.key]: e.target.value })}/> : <input id={`op-${field.key}`} type={field.type || 'text'} readOnly={field.readOnly} value={values[field.key]} aria-invalid={!!errors[field.key]} aria-describedby={`hint-${field.key}`} onChange={e => setValues({ ...values, [field.key]: e.target.value })}/>}
+          {field.options ? <select id={`op-${field.key}`} value={values[field.key]} aria-invalid={!!errors[field.key]} aria-describedby={`hint-${field.key}`} onChange={e => change(field.key, e.target.value)}><option value="" disabled>Chọn…</option>{field.options.map(option => <option key={option}>{option}</option>)}</select> : field.type === 'json' ? <textarea id={`op-${field.key}`} rows={7} spellCheck={false} value={values[field.key]} aria-invalid={!!errors[field.key]} aria-describedby={`hint-${field.key}`} onChange={e => change(field.key, e.target.value)}/> : <input id={`op-${field.key}`} type={field.type || 'text'} readOnly={field.readOnly} value={values[field.key]} aria-invalid={!!errors[field.key]} aria-describedby={`hint-${field.key}`} onChange={e => change(field.key, e.target.value)}/>}
           <small id={`hint-${field.key}`} className={errors[field.key] ? 'field-error' : 'subtle'}>{errors[field.key] || field.hint}</small>
         </div>)}
-        {errors.reason && <p className="field-error" role="alert">{errors.reason}</p>}{queuedAction && <label>Lý do vận hành<textarea required value={reason} maxLength={2000} onChange={e => setReason(e.target.value)}/></label>}
-        <div className="operation-actions"><button type="button" className="light-button" onClick={onClose}>Cancel</button><button className="primary-button" type="submit">Review request</button></div>
-      </form> : <div className="confirmation"><h3>Confirm {title}</h3>
+        {queuedAction && <div className="form-field"><label htmlFor="op-reason">Lý do vận hành *</label><textarea id="op-reason" value={reason} maxLength={2000} aria-invalid={!!errors.reason} aria-describedby="hint-reason" onChange={e => setReason(e.target.value)}/><small id="hint-reason" className={errors.reason ? 'field-error' : 'subtle'}>{errors.reason || 'Được lưu vào sổ điều hành tác vụ.'}</small></div>}
+        <div className="operation-actions"><button type="button" className="light-button" onClick={onClose}>Hủy</button><button className="primary-button" type="submit">Xem lại yêu cầu</button></div>
+      </form> : <div className="confirmation"><h3>Xác nhận: {title}</h3>
         {'job' in operation && <p><strong>{operation.job.name}</strong> · {operation.job.code} · {operation.job.dataSourceCode}</p>}
-        {operation.kind === 'run-job' || operation.kind === 'manual-ingestion' ? <p>This operation can call external services, consume resources and write data. It creates a new execution.</p> : operation.kind === 'validate-pending' ? <p>This batch may process up to {values.limit} payloads and update validation results and data versions.</p> : operation.kind === 'activation' ? <p>{deactivating ? 'Disabling prevents future scheduled executions. The job remains visible and can be enabled again.' : 'Enabling makes the job eligible for scheduling and resets its retry budget.'}</p> : operation.kind === 'upsert-source' && source && source.active !== (values.active === 'true') ? <p>The source active status will change. This can affect ingestion.</p> : <p>This request writes configuration or validation data.</p>}
+        <p>{impact}</p>
         <pre>{safeObject(body)}</pre>
-        {mutation.isError && <div className="field-error" role="alert"><p>{mutation.error.message}</p>{mutation.error instanceof ApiError && mutation.error.upstreamStatus != null && <p>Upstream HTTP status: {mutation.error.upstreamStatus}</p>}{mutation.error instanceof ApiError && mutation.error.runId && <button className="light-button" onClick={() => { onClose(); onRun((mutation.error as ApiError).runId!); }}>View failed run</button>}</div>}
-        <div className="operation-actions"><button className="light-button" disabled={mutation.isPending} onClick={() => { setReview(false); mutation.reset(); }}>Back</button><button className="primary-button" disabled={!!blocked || mutation.isPending} onClick={execute}>{mutation.isPending ? 'Executing…' : 'Confirm and execute'}</button></div>
+        {mutation.isError && <div className="field-error" role="alert"><p>{mutation.error.message}</p>{mutation.error instanceof ApiError && mutation.error.upstreamStatus != null && <p>HTTP status từ nguồn: {mutation.error.upstreamStatus}</p>}{mutation.error instanceof ApiError && mutation.error.runId && <button className="light-button" onClick={() => { onClose(); onRun((mutation.error as ApiError).runId!); }}>Xem lượt chạy lỗi</button>}</div>}
+        <div className="operation-actions"><button className="light-button" disabled={mutation.isPending} onClick={() => { setReview(false); mutation.reset(); }}>Quay lại</button><button className="primary-button" disabled={!!blocked || mutation.isPending} onClick={execute}>{mutation.isPending ? 'Đang thực hiện…' : 'Xác nhận và thực hiện'}</button></div>
       </div>}
     </>}
   </Drawer>;

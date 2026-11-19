@@ -1,3 +1,30 @@
+# Cập nhật 19/11/2026 — rà soát và hoàn thiện admin FE
+
+- Toàn bộ màn hình (tổng quan, lượt chạy, job, nguồn, chất lượng, danh mục mã, form thao tác) và lỗi API dùng tiếng Việt.
+- Lượt chạy / raw payload / chất lượng lọc theo lượt chạy giờ đọc đúng bản ghi của lượt đó qua bộ lọc chính xác của data browser (tối đa 100), không còn chỉ tìm trong mẫu 50 kết quả mới nhất.
+- API quản trị nâng cao: suy ra tên tham số đường dẫn từ route khi catalog backend trả tên "body" (47/90 endpoint), nên các form có ID trên đường dẫn dùng được.
+- Tác vụ nền: dùng chung một hook theo dõi; khi tác vụ kết thúc, dữ liệu trên màn hình tự làm mới.
+- GET timeout 20 giây (kiểm tra Python lạnh mất ~8 giây); phiên hết hạn hiển thị thông báo ở màn hình kết nối.
+
+# Cập nhật 12/11/2026 — gọn điều hướng admin
+
+Menu gộp từ 14 xuống 9 mục, nhãn tiếng Việt, không mất chức năng:
+
+| Mục | Gồm (trước đây) |
+|---|---|
+| Tổng quan | Overview + System summary |
+| Tác vụ & lịch sử | Điều tra & xử lý, Ingestion Runs, Audit (tab: tác vụ nền, lượt chạy gần đây, toàn bộ lượt chạy, validation & version, audit) |
+| Tra cứu dữ liệu | giữ nguyên |
+| Hệ thống | Hệ thống & độ phủ, lịch chạy, Luồng & API quản trị (tab "API quản trị nâng cao") |
+| Luồng dữ liệu | Luồng dữ liệu + Điều hành tác vụ (thêm chế độ lấy lại nguồn theo yêu cầu gốc) |
+| Job & nguồn | Ingestion Jobs + Data Sources |
+| Danh mục mã · Chất lượng dữ liệu · Vận hành AI | giữ nguyên |
+
+`CommandPage` bị bỏ vì trùng với Luồng dữ liệu + lịch sử tác vụ. API mặc định là `http://localhost:8080`
+(trước đây là một URL ngrok cố định); đặt `VITE_API_BASE_URL` khi build cho môi trường khác, hoặc nhập địa chỉ ở màn hình kết nối.
+Bảng phân trang không còn làm sập trang khi response thiếu `total`.
+Kiểm thử: build, 11 unit, 3 suite Playwright fixture, và walk Chrome thật 18 màn hình qua backend localhost + DB thật (chỉ GET).
+
 # TOKEN BURNER Admin Console
 
 Financial data monitoring and administration with React 19, TypeScript, Vite, TanStack Query and Lucide. Integrates Java Spring Boot only.

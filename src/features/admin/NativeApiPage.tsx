@@ -4,9 +4,19 @@ import { API_BASE, getJson, requestJson } from '../../shared/api/client';
 import { Panel, QueryState } from '../../shared/components/Ui';
 import { safeObject } from '../../shared/utils/format';
 import { ApiResult } from './Records';
+import { submitCommand } from './CommandTracker';
 
 interface Field { name: string; type: string; format?: string; enum?: string[]; fields?: Field[]; items?: Field; location?: string; required?: boolean; defaultValue?: string }
-interface Endpoint { id: string; method: string; path: string; operation: string; controller: string; inputs: Field[] }
+interface Endpoint { id: string; method: string; path: string; operation: string; controller: string; inputs: Field[]; unnamedQuery?: number }
+// Some deployed builds return path/query parameters named "body" (parameter names are not discovered on the server).
+// Path names can be recovered from the route template; unnamed query parameters cannot, so they are left to server defaults.
+export function normalizeEndpoint(endpoint: Endpoint): Endpoint {
+  const template = [...endpoint.path.matchAll(/{([^}]+)}/g)].map(match => match[1]);
+  const free = template.filter(name => !endpoint.inputs.some(input => input.location === 'path' && input.name === name));
+  const inputs = endpoint.inputs.map(input => input.location === 'path' && !template.includes(input.name) && free.length ? { ...input, name: free.shift()! } : input);
+  const unnamedQuery = inputs.filter(input => input.location === 'query' && input.name === 'body').length;
+  return { ...endpoint, inputs: inputs.filter(input => !(input.location === 'query' && input.name === 'body')), unnamedQuery };
+}
 const groups = [ ['all', 'Tất cả chức năng'], ['ingestion', 'Job & lấy dữ liệu'], ['validation', 'Validation & phiên bản'], ['forecasts', 'Dự báo tài chính'], ['llm', 'LLM & prompt'], ['news-recovery', 'Khôi phục tin & duyệt'], ['financial-data', 'Chất lượng & chỉ số'], ['market', 'Giá & chỉ số thị trường'], ['macro', 'Kinh tế vĩ mô'] ];
 const labels: Record<string,string> = { jobId: 'Job ID', rawPayloadId: 'Raw payload ID', articleId: 'Bài viết ID', runId: 'Lượt chạy ID', securityId: 'Chứng khoán ID', asOfDate: 'Ngày chốt dữ liệu', horizonQuarters: 'Số quý dự báo (1–8)', targets: 'Chỉ tiêu dự báo', requireMacro: 'Yêu cầu dữ liệu vĩ mô', reviewer: 'Người duyệt', reason: 'Lý do', documentUrls: 'URL tài liệu (tối đa 3)', startDate: 'Từ ngày', endDate: 'Đến ngày', symbol: 'Mã chứng khoán', dataSourceCode: 'Mã nguồn dữ liệu', cronExpression: 'Lịch cron UTC (6 trường)', timeoutSeconds: 'Timeout (giây)', maxRetries: 'Ngân sách retry (10)', parameters: 'Tham số nguồn (JSON)', active: 'Bật lịch / kích hoạt', provider: 'Nhà cung cấp', limit: 'Số lượng tối đa', operation: 'Thao tác nguồn', name: 'Tên hiển thị', code: 'Mã định danh', statement: 'Loại báo cáo' };
 function matches(group: string, e: Endpoint) {
@@ -18,16 +28,19 @@ function Input({ field, value, change }: { field: Field; value: string; change: 
   const label = labels[field.name] ?? field.name.replace(/([A-Z])/g, ' $1');
   let control;
   if (field.type === 'boolean' || field.enum) control = <select aria-label={label} value={value} onChange={e => change(e.target.value)}><option value="">Dùng mặc định / bỏ trống</option>{(field.enum ?? ['true', 'false']).map(o => <option key={o}>{o}</option>)}</select>;
-  else if (field.type === 'array' && field.items?.enum) control = <select aria-label={label} multiple value={value ? JSON.parse(value) : []} onChange={e => change(JSON.stringify([...e.target.selectedOptions].map(o => o.value)))}>{field.items.enum.map(o => <option key={o}>{o}</option>)}</select>;
+  else if (field.type === 'array' && field.items?.enum) control = <select aria-label={label} multiple value={selectedValues(value)} onChange={e => change(JSON.stringify([...e.target.selectedOptions].map(o => o.value)))}>{field.items.enum.map(o => <option key={o}>{o}</option>)}</select>;
   else if (['object', 'array'].includes(field.type)) control = <textarea aria-label={label} rows={4} value={value} placeholder={field.type === 'array' ? '["..."]' : '{}'} onChange={e => change(e.target.value)}/>;
   else control = <input aria-label={label} value={value} required={field.required} type={field.format === 'date' ? 'date' : field.type === 'number' ? 'number' : 'text'} onChange={e => change(e.target.value)}/>;
-  return <label>{label}{field.required ? ' *' : ''}{control}{field.format === 'uuid' && <small>ID có trong “Tra cứu dữ liệu” hoặc phần Data Scope.</small>}</label>;
+  return <label>{label}{field.required ? ' *' : ''}{control}{field.format === 'uuid' && <small>ID có trong “Tra cứu dữ liệu” hoặc “Danh mục mã”.</small>}</label>;
+}
+function selectedValues(value: string): string[] {
+  try { const parsed: unknown = value ? JSON.parse(value) : []; return Array.isArray(parsed) ? parsed.map(String) : []; } catch { return []; }
 }
 function parse(field: Field, value: string): unknown {
   if (!value.trim()) return undefined;
   if (field.type === 'boolean') return value === 'true';
   if (field.type === 'number') { const n = Number(value); if (!Number.isFinite(n)) throw new Error(`${field.name}: số không hợp lệ`); return n; }
-  if (['object', 'array'].includes(field.type)) return JSON.parse(value);
+  if (['object', 'array'].includes(field.type)) { try { return JSON.parse(value); } catch { throw new Error(`${field.name}: JSON không hợp lệ`); } }
   return value;
 }
 function EndpointForm({ endpoint }: { endpoint: Endpoint }) {
@@ -40,11 +53,11 @@ function EndpointForm({ endpoint }: { endpoint: Endpoint }) {
   const mutation = useMutation({ mutationFn: async (request: { path: string; body?: unknown }) => {
     let action: string | undefined; let input: unknown;
     if (endpoint.method === 'POST' && /^\/api\/ingestion-jobs\/[^/]+\/run$/.test(request.path)) { action = 'RUN_JOB'; input = { jobId: values.jobId }; }
-    if (endpoint.method === 'POST' && /^\/api\/ingestion-jobs\/[^/]+\/versions\/[^/]+\/build$/.test(request.path)) { action = 'BUILD_MARKET_PRICE_VERSION'; input = { jobId: values.jobId, versionId: values.versionId }; }
+    if (endpoint.method === 'POST' && /^\/api\/ingestion-jobs\/[^/]+\/versions\/[^/]+\/build$/.test(request.path)) { action = 'BUILD_VERSION'; input = { jobId: values.jobId, versionId: values.versionId }; }
     if (endpoint.method === 'POST' && request.path === '/api/ingestions/manual') { action = 'MANUAL_INGESTION'; input = request.body; }
     if (endpoint.method === 'POST' && /^\/api\/admin\/validation\/raw-payloads\//.test(request.path)) { action = 'VALIDATE_RAW'; input = { rawPayloadId: values.rawPayloadId }; }
     if (endpoint.method === 'POST' && request.path.startsWith('/api/admin/validation/pending')) { action = 'VALIDATE_PENDING'; input = { limit: Number(values.limit || 50) }; }
-    return action ? requestJson(API_BASE, '/api/admin/console/commands', 'POST', { idempotencyKey: idempotency.current, action, input, reason }) : requestJson(API_BASE, request.path, endpoint.method, request.body);
+    return action ? submitCommand(action, input, reason, idempotency.current) : requestJson(API_BASE, request.path, endpoint.method, request.body);
   }, retry: false, onSettled: () => { void client.invalidateQueries(); } });
   const prepare = () => {
     try {
@@ -73,18 +86,19 @@ function EndpointForm({ endpoint }: { endpoint: Endpoint }) {
     finally { sending.current = false; }
   };
   return <div className="native-form"><h3>{endpoint.operation}</h3><p className="mono break">{endpoint.method} {endpoint.path}</p><p className="subtle">{endpoint.controller} · hợp đồng lấy trực tiếp từ backend đang kết nối.</p>
+    {!!endpoint.unnamedQuery && <p role="note" className="subtle">Backend không trả tên của {endpoint.unnamedQuery} tham số query cho chức năng này; các tham số đó dùng giá trị mặc định của server.</p>}
     <p>Với forecast, đọc cấu hình và preview trước execute. Recovery chỉ phân tích sau khi admin duyệt. Kiểm tra validation và bảng cuối sau các bước ingest/build; không sửa FAIL thành PASS trên dashboard.</p>
     <fieldset disabled={!!review || mutation.isPending}><div className="admin-form-grid">{fields.map(f => <Input key={`${f.location}-${f.name}`} field={f} value={values[f.name] ?? f.defaultValue ?? ''} change={v => setValues(current => ({ ...current, [f.name]: v }))}/>)}</div>
     {endpoint.method !== 'GET' && <label>Lý do kiểm tra / vận hành<textarea aria-label="Lý do kiểm tra / vận hành" value={reason} maxLength={2000} onChange={e => setReason(e.target.value)}/><small>Tác vụ ingestion/validation được ghi vào sổ điều hành. Các luồng AI dùng audit riêng của backend; ghi lý do duyệt vào trường reason nếu API có hỗ trợ.</small></label>}</fieldset>
     {error && <p role="alert" className="state-error">{error}</p>}
     {review ? <><h3>Xác nhận thay đổi</h3><pre>{safeObject(review)}</pre><p>Thao tác có thể ghi database hoặc gọi dịch vụ AI có tính phí. Kiểm tra cấu hình và đối tượng trước khi thực hiện.</p><button className="primary-button" disabled={mutation.isPending} onClick={() => void execute()}>Xác nhận thực hiện</button><button className="light-button" disabled={mutation.isPending} onClick={() => setReview(null)}>Quay lại sửa</button></> : <button className="primary-button" disabled={mutation.isPending} onClick={prepare}>{mutation.isPending ? 'Đang xử lý…' : endpoint.method === 'GET' ? 'Đọc dữ liệu' : 'Xem lại thao tác'}</button>}
     {mutation.error && <p className="state-error" role="alert">{mutation.error.message}</p>}
-    {mutation.isSuccess && <div role="status"><h3>Kết quả từ backend</h3><ApiResult value={mutation.data}/><p className="subtle">Nếu nhận ID tác vụ QUEUED/RUNNING, theo dõi trong “Điều hành tác vụ”. Tác vụ nguồn không tự chạy các bước build tiếp theo trừ khi workflow hiện có đã làm việc đó.</p></div>}
+    {mutation.isSuccess && <div role="status"><h3>Kết quả từ backend</h3><ApiResult value={mutation.data}/><p className="subtle">Nếu nhận ID tác vụ QUEUED/RUNNING, theo dõi tại “Tác vụ &amp; lịch sử” → “Tác vụ nền”. Tác vụ nguồn không tự chạy các bước build tiếp theo trừ khi workflow hiện có đã làm việc đó.</p></div>}
   </div>;
 }
 export function NativeApiPage() {
   const [group, setGroup] = useState('all'); const [search, setSearch] = useState(''); const [selected, setSelected] = useState('');
-  const catalog = useQuery({ queryKey: ['native-catalog'], queryFn: () => getJson<Endpoint[]>(API_BASE, '/api/admin/console/catalog'), staleTime: 60000 });
+  const catalog = useQuery({ queryKey: ['native-catalog'], queryFn: async () => (await getJson<Endpoint[]>(API_BASE, '/api/admin/console/catalog')).map(normalizeEndpoint), staleTime: 60000 });
   const options = catalog.data?.filter(e => matches(group, e) && `${e.path} ${e.operation} ${e.controller}`.toLowerCase().includes(search.toLowerCase())) ?? [];
   const endpoint = options.find(e => e.id === selected);
   return <Panel title="Luồng & API quản trị" note="Gồm quản lý job, source/master data, validation, build/chỉ số, LLM, forecast, prompt và duyệt recovery. Chỉ hiển thị endpoint thực sự có trong bản backend đang chạy.">

@@ -62,7 +62,7 @@ test('all mutation endpoint methods and bodies serialize against intercepted fet
     ['POST', '/api/ingestion-jobs'], ['POST', '/api/ingestion-jobs/a%2Fb/run'], ['PATCH', '/api/ingestion-jobs/j/activation'], ['POST', '/api/ingestions/manual'], ['POST', '/api/data-sources'], ['POST', '/api/admin/validation/raw-payloads/raw'], ['POST', '/api/admin/validation/pending?limit=100'],
   ]);
   assert.equal(calls[1].body, undefined); assert.deepEqual(JSON.parse(calls[2].body), { active: false });
-  assert.throws(() => adminApi.validatePending(101), /1 to 100/);
+  assert.throws(() => adminApi.validatePending(101), /1 đến 100/);
 });
 test('HTTP failure preserves run diagnostics, handles 401/403 and never retries', async () => {
   let calls = 0;
@@ -71,6 +71,6 @@ test('HTTP failure preserves run diagnostics, handles 401/403 and never retries'
   assert.equal(calls, 1);
   for (const status of [401, 403]) {
     globalThis.fetch = async () => new Response('{}', { status });
-    await assert.rejects(() => requestJson('', '/api/test'), e => e.status === status && /Session|permission/.test(e.message));
+    await assert.rejects(() => requestJson('', '/api/test'), e => e.status === status && /hết hạn|quyền/.test(e.message));
   }
 });

@@ -1,16 +1,29 @@
-import { useRef, useState } from 'react';
+import { useEffect, useRef, useState } from 'react';
 import { useMutation, useQuery, useQueryClient } from '@tanstack/react-query';
 import { API_BASE, getJson, requestJson } from '../../shared/api/client';
 import { Badge, Panel, QueryState } from '../../shared/components/Ui';
 import { ApiResult, type Row } from './Records';
 import { dateTime, safeObject } from '../../shared/utils/format';
 
+const finished = (status: unknown) => !['QUEUED', 'RUNNING'].includes(String(status));
+/** Polls one durable command; when it finishes while watched, data views are refreshed because the native work may have written runs, versions or master data. */
+export function useCommand(id: string | null | undefined) {
+  const client = useQueryClient();
+  const query = useQuery({ queryKey: ['admin-command', id], queryFn: () => getJson<Row>(API_BASE, `/api/admin/console/commands/${encodeURIComponent(id!)}`), enabled: !!id,
+    refetchInterval: q => q.state.data && !finished(q.state.data.status) ? 2000 : false });
+  const status = query.data?.status; const previous = useRef<unknown>(undefined);
+  useEffect(() => {
+    const before = previous.current; previous.current = status;
+    if (before !== undefined && status !== undefined && !finished(before) && finished(status)) void client.invalidateQueries({ predicate: q => q.queryKey[0] !== 'admin-command' });
+  }, [status, client]);
+  return query;
+}
 export const submitCommand = (action: string, input: unknown, reason: string, idempotencyKey: string) => requestJson<Row>(API_BASE, '/api/admin/console/commands', 'POST', { action, input, reason, idempotencyKey });
 export function CommandTracker({ id, onRun, onCommand }: { id: string; onRun: (id: string) => void; onCommand: (id: string) => void }) {
   const [reason, setReason] = useState(''); const [review, setReview] = useState<string | null>(null);
   const key = useRef(crypto.randomUUID()); const sending = useRef(false); const client = useQueryClient();
-  const command = useQuery({ queryKey: ['admin-command', id], queryFn: () => getJson<Row>(API_BASE, `/api/admin/console/commands/${id}`), refetchInterval: q => !q.state.data || ['QUEUED', 'RUNNING'].includes(String(q.state.data.status)) ? 2000 : false });
-  const mutation = useMutation({ retry: false, mutationFn: async () => requestJson<Row>(API_BASE, `/api/admin/console/commands/${id}/${review}`, 'POST', { reason, reviewed: true, idempotencyKey: key.current }), onSuccess: value => { setReview(null); if (value.id !== id) onCommand(String(value.id)); void client.invalidateQueries(); } });
+  const command = useCommand(id);
+  const mutation = useMutation({ retry: false, mutationFn: async () => requestJson<Row>(API_BASE, `/api/admin/console/commands/${encodeURIComponent(id)}/${review}`, 'POST', { reason, reviewed: true, idempotencyKey: key.current }), onSuccess: value => { setReview(null); if (value.id !== id) onCommand(String(value.id)); void client.invalidateQueries(); } });
   const data = command.data;
   const progress = data?.progress_json as Row | undefined; const result = data?.result_json as Row | undefined;
   const runIds = [...new Set([progress?.sourceRunId, result?.sourceRunId, result?.runId, (result?.execution as Row | undefined)?.runId, (result?.build as Row | undefined)?.runId].filter((v): v is string => typeof v === 'string'))];

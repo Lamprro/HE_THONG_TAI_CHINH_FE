@@ -9,11 +9,11 @@ export function Panel({ title, eyebrow, note, action, children, className = '' }
   return <section className={`panel ${className}`}><div className="panel-head"><div>{eyebrow && <div className="eyebrow">{eyebrow}</div>}<h2>{title}</h2>{note && <p className="subtle">{note}</p>}</div>{action}</div>{children}</section>;
 }
 
-export function QueryState({ query, empty = 'No records found.', children }: { query: UseQueryResult<unknown>; empty?: string; children: ReactNode }) {
-  if (query.isPending) return <div className="skeleton-stack" aria-label="Loading"><div/><div/><div/></div>;
-  if (query.isError && !query.data) return <div className="state-error" role="alert"><strong>Unable to load data</strong><span>{query.error.message}</span><button className="light-button" onClick={() => query.refetch()}>Retry</button></div>;
+export function QueryState({ query, empty = 'Không có bản ghi.', children }: { query: UseQueryResult<unknown>; empty?: string; children: ReactNode }) {
+  if (query.isPending) return <div className="skeleton-stack" aria-label="Đang tải"><div/><div/><div/></div>;
+  if (query.isError && !query.data) return <div className="state-error" role="alert"><strong>Không tải được dữ liệu</strong><span>{query.error.message}</span><button className="light-button" onClick={() => query.refetch()}>Thử lại</button></div>;
   if (Array.isArray(query.data) && query.data.length === 0) return <div className="state-empty">{empty}</div>;
-  return <>{query.isFetching && <div className="refresh-note" role="status">Refreshing… showing the last loaded data</div>}{children}</>;
+  return <>{query.isFetching && <div className="refresh-note" role="status">Đang làm mới… tạm hiển thị dữ liệu đã tải trước đó</div>}{children}</>;
 }
 
 export function Drawer({ title, subtitle, onClose, children }: { title: string; subtitle?: string; onClose: () => void; children: ReactNode }) {
@@ -36,5 +36,5 @@ export function Drawer({ title, subtitle, onClose, children }: { title: string; 
     document.addEventListener('keydown', onKeyDown);
     return () => { document.removeEventListener('keydown', onKeyDown); previous?.focus(); };
   }, []);
-  return <div className="drawer-backdrop" onMouseDown={onClose}><aside ref={dialog} tabIndex={-1} className="drawer" role="dialog" aria-modal="true" aria-label={title} onMouseDown={event => event.stopPropagation()}><div className="drawer-head"><div><div className="eyebrow">TOKEN BURNER / DETAIL</div><h2>{title}</h2>{subtitle && <p className="subtle">{subtitle}</p>}</div><button className="icon-button" aria-label="Close" onClick={onClose}>✕</button></div><div className="drawer-body">{children}</div></aside></div>;
+  return <div className="drawer-backdrop" onMouseDown={onClose}><aside ref={dialog} tabIndex={-1} className="drawer" role="dialog" aria-modal="true" aria-label={title} onMouseDown={event => event.stopPropagation()}><div className="drawer-head"><div><div className="eyebrow">TOKEN BURNER / CHI TIẾT</div><h2>{title}</h2>{subtitle && <p className="subtle">{subtitle}</p>}</div><button className="icon-button" aria-label="Close" onClick={onClose}>✕</button></div><div className="drawer-body">{children}</div></aside></div>;
 }

@@ -19,7 +19,7 @@ export const adminApi = {
   upsertSource: (body: DataSourceRequest) => write<DataSource>('upsert-source', '/api/data-sources', 'POST', body),
   validateRaw: (rawId: string) => write<ValidationExecutionResponse>('validate-raw', `/api/admin/validation/raw-payloads/${id(rawId)}`, 'POST'),
   validatePending: (limit: number) => {
-    if (!Number.isInteger(limit) || limit < 1 || limit > 100) throw new Error('Limit must be an integer from 1 to 100.');
+    if (!Number.isInteger(limit) || limit < 1 || limit > 100) throw new Error('Giới hạn phải là số nguyên từ 1 đến 100.');
     return write<ValidationExecutionResponse[]>('validate-pending', `/api/admin/validation/pending?limit=${limit}`, 'POST');
   },
 };
