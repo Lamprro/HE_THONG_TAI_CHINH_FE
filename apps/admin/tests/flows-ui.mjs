@@ -53,6 +53,24 @@ try{
   await button('Khôi phục & duyệt').click();await button('Chọn để đọc và duyệt').click();await page.getByLabel('Người duyệt',{exact:true}).fill('Admin fixture');await page.getByLabel('Lý do thao tác AI',{exact:true}).fill('Reviewed recovery proposal');await button('Chuẩn bị duyệt đề xuất').click();await button('Xác nhận thao tác AI').click();await page.getByText('Kết quả nghiệp vụ: APPROVED',{exact:true}).waitFor();assert.equal(writes.some(w=>w.body?.action==='RECOVERY_ANALYZE'),false);
   await button('Prompt & cấu hình').click();await button('Chọn template').click();await button('Lấy nội dung bản gốc để sửa').click();await page.getByLabel('Version prompt mới',{exact:true}).fill('v2');await page.getByLabel('Lý do thay đổi prompt',{exact:true}).fill('Reviewed immutable version');await button('Xem lại version mới').click();await button('Xác nhận thay đổi prompt').click();await button('Chuẩn bị bật version').waitFor();assert.equal(newPrompt.enabled,false);await button('Chuẩn bị bật version').click();await button('Xác nhận thay đổi prompt').click();await button('Chuẩn bị tắt version').waitFor();assert.equal(promoted,true);
   await button('Hệ thống').click();await button('Chỉnh phạm vi lịch').click();await page.getByLabel('Lý do thay đổi lịch',{exact:true}).fill('Keep live scheduler disabled');await button('Xem lại thay đổi lịch').click();await button('Xác nhận cập nhật lịch').click();assert.equal(writes.find(w=>w.path==='/api/admin/console/schedule').body.enabled,false);
-  await page.setViewportSize({width:390,height:844});assert.equal(await page.evaluate(()=>document.documentElement.scrollWidth<=innerWidth),true);assert.deepEqual(errors,[]);assert.equal(await page.evaluate(()=>localStorage.length+sessionStorage.length),0);
+  // A click finishes before the mutation response and React's next render.
+  await button('Xác nhận cập nhật lịch').waitFor({ state: 'hidden' });
+  await page.setViewportSize({ width: 390, height: 844 });
+  // Wait for responsive layout; measuring immediately after resize races CI rendering.
+  try {
+    await page.waitForFunction(() => document.documentElement.scrollWidth <= innerWidth, null, { timeout: 5000 });
+  } catch (error) {
+    const layout = await page.evaluate(() => ({
+      viewport: innerWidth,
+      width: document.documentElement.scrollWidth,
+      overflowing: [...document.querySelectorAll('body *')]
+        .filter(el => el.getBoundingClientRect().right > innerWidth)
+        .slice(0, 15).map(el => ({ tag: el.tagName, className: el.className, right: el.getBoundingClientRect().right })),
+    }));
+    throw new Error(`Mobile horizontal overflow: ${JSON.stringify(layout)}`, { cause: error });
+  }
+  assert.equal(await page.evaluate(() => document.documentElement.scrollWidth <= innerWidth), true);
+  assert.deepEqual(errors, []);
+  assert.equal(await page.evaluate(() => localStorage.length + sessionStorage.length), 0);
   console.log('FULL FLOWS UI PASS: typed canonical pipeline, queued cancellation, reviewed retry, immutable issue audit, forecast eligibility gate, recovery approval separated from analysis, immutable prompt version/promotion, disabled scheduler update, mobile and no credential persistence. All APIs intercepted; no real provider, AI or business DB writes.');
 }finally{await browser.close();await new Promise(r=>server.close(r));}
