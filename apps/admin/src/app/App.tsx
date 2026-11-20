@@ -159,7 +159,7 @@ function Dashboard() {
       </>}
     </div>
     <RunDrawer onRaw={id => { setRunId(null); setRawId(id); }} onIssue={value => { setRunId(null); setIssue(value); }} id={runId} onClose={() => setRunId(null)} onOperation={setOperation} onJob={id => { setRunId(null); openJobs(id); }} onSource={id => { setRunId(null); openSources(id); }} onQuality={id => { setRunId(null); openQuality(id, null, 'validation'); }}/>
-    <ValidationDrawer onRaw={id => { setIssue(null); setRawId(id); }} issue={issue} onClose={() => setIssue(null)} onRun={setRunId}/>
+    <ValidationDrawer onRaw={id => { setIssue(null); setRawId(id); }} issue={issue} onClose={() => setIssue(null)} onRun={setRunId} onWorkflow={openWorkflow}/>
     <RawPayloadDrawer id={rawId} onClose={() => setRawId(null)} onRun={id => { setRawId(null); setRunId(id); }} onIssue={value => { setRawId(null); setIssue(value); }} onOperation={value => { setRawId(null); setOperation(value); }} onQuality={(payloadId, ingestionRunId) => { setRawId(null); openQuality(ingestionRunId, payloadId, 'validation'); }} onVersions={id => { setRawId(null); openQuality(id, null, 'versions'); }}/>
     {operation && <OperationDrawer operation={operation} sources={sources.data} onClose={() => setOperation(null)} onRun={setRunId}/>}
   </AdminLayout>;

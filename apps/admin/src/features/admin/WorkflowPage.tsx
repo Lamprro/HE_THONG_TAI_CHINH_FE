@@ -11,14 +11,34 @@ import type { Row } from './Records';
 const operations = ['OHLCV', 'QUOTE', 'FINANCIAL_STATEMENT', 'RATIO', 'INDEX_OHLCV', 'INDEX_MEMBERS', 'FOREIGN_TRADES', 'COMPANY'];
 const builders = ['MARKET_PRICE_BUILD', 'FINANCIAL_STATEMENT_BUILD', 'FINANCIAL_METRIC_BUILD', 'INDEX_PRICE_BUILD', 'INDEX_MEMBERSHIP_BUILD', 'FOREIGN_TRADE_BUILD', 'SECURITY_REFERENCE_BUILD'];
 const today = () => new Intl.DateTimeFormat('en-CA', { timeZone: 'Asia/Ho_Chi_Minh', year: 'numeric', month: '2-digit', day: '2-digit' }).format(new Date());
-export interface WorkflowSelection { mode?: string; runId?: string; versionId?: string }
+export interface WorkflowSelection {
+  mode?: string;
+  runId?: string;
+  versionId?: string;
+  operation?: string;
+  source?: string;
+  symbol?: string;
+  startDate?: string;
+  endDate?: string;
+  reason?: string;
+  statement?: string;
+  period?: string;
+}
 export function WorkflowPage({ initial = {}, onRun }: { initial?: WorkflowSelection; onRun: (id: string) => void }) {
-  const [mode, setMode] = useState(initial.mode ?? 'INGEST_VALIDATE_BUILD'); const [operation, setOperation] = useState('OHLCV');
-  const [source, setSource] = useState(''); const [symbol, setSymbol] = useState('');
-  const [start, setStart] = useState(''); const [end, setEnd] = useState(today());
-  const [statement, setStatement] = useState('balance_sheet'); const [period, setPeriod] = useState('quarter');
-  const [runId, setRun] = useState(initial.runId ?? ''); const [version, setVersion] = useState(initial.versionId ?? ''); const [jobId, setJob] = useState('');
-  const [params, setParams] = useState('{}'); const [reason, setReason] = useState(''); const [error, setError] = useState('');
+  const [mode, setMode] = useState(initial.mode ?? 'INGEST_VALIDATE_BUILD');
+  const [operation, setOperation] = useState(initial.operation ?? 'OHLCV');
+  const [source, setSource] = useState(initial.source ?? '');
+  const [symbol, setSymbol] = useState(initial.symbol ?? '');
+  const [start, setStart] = useState(initial.startDate ?? '');
+  const [end, setEnd] = useState(initial.endDate ?? today());
+  const [statement, setStatement] = useState(initial.statement ?? 'balance_sheet');
+  const [period, setPeriod] = useState(initial.period ?? 'quarter');
+  const [runId, setRun] = useState(initial.runId ?? '');
+  const [version, setVersion] = useState(initial.versionId ?? '');
+  const [jobId, setJob] = useState('');
+  const [params, setParams] = useState('{}');
+  const [reason, setReason] = useState(initial.reason ?? '');
+  const [error, setError] = useState('');
   const [review, setReview] = useState<Row | null>(null); const [command, setCommand] = useState<string | null>(null); const sending = useRef(false);
   const sources = useQuery({ queryKey: ['sources'], queryFn: () => getJson<DataSource[]>(API_BASE, '/api/data-sources') });
   const jobs = useQuery({ queryKey: ['jobs'], queryFn: () => getJson<IngestionJob[]>(API_BASE, '/api/ingestion-jobs?activeOnly=false') });
