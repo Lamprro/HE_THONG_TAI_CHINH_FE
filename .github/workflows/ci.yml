@@ -1,4 +1,4 @@
-name: Admin frontend CI
+name: Frontend CI
 on:
   push:
     branches: [main]
@@ -7,15 +7,19 @@ on:
 permissions:
   contents: read
 jobs:
-  browser-contract:
+  admin:
     runs-on: ubuntu-latest
     timeout-minutes: 15
+    defaults:
+      run:
+        working-directory: apps/admin
     steps:
       - uses: actions/checkout@v4
       - uses: actions/setup-node@v4
         with:
           node-version: '24'
           cache: npm
+          cache-dependency-path: apps/admin/package-lock.json
       - run: npm ci
       - run: npm test
       - run: npm run build
@@ -23,3 +27,22 @@ jobs:
       - run: npm run test:ui
         env:
           PLAYWRIGHT_CHANNEL: chromium
+  user:
+    runs-on: ubuntu-latest
+    timeout-minutes: 15
+    defaults:
+      run:
+        working-directory: apps/user
+    steps:
+      - uses: actions/checkout@v4
+      - uses: pnpm/action-setup@v4
+        with:
+          version: 11.25.0
+      - uses: actions/setup-node@v4
+        with:
+          node-version: '24'
+          cache: pnpm
+          cache-dependency-path: apps/user/pnpm-lock.yaml
+      - run: pnpm install --frozen-lockfile
+      - run: pnpm test
+      - run: pnpm build

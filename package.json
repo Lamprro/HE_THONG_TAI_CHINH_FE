@@ -1,0 +1,11 @@
+{
+  "name": "financial-frontend",
+  "private": true,
+  "scripts": {
+    "dev:admin": "node scripts/run.mjs admin dev --host 127.0.0.1 --port 5174 --strictPort",
+    "dev:user": "node scripts/run.mjs user dev --port 5173 --strictPort",
+    "build": "node scripts/run.mjs all build",
+    "test": "node scripts/run.mjs all test",
+    "typecheck": "node scripts/run.mjs all typecheck"
+  }
+}
