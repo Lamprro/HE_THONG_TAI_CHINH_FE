@@ -25,6 +25,10 @@ const security = { id: 'security-1', companyId: company.id, symbol: 'FPT', excha
 const run = { id: '00000000-0000-0000-0000-000000000002', ingestionJobId: job.id, dataSourceId: 1, triggerType: 'MANUAL', status: 'SUCCESS', fetchedCount: 2, insertedCount: 2, updatedCount: 0, rejectedCount: 0, errorCount: 0, startedAt: '2026-10-15T00:00:00Z', finishedAt: '2026-10-15T00:01:00Z', createdAt: '2026-10-15T00:00:00Z' };
 await page.route('**/api/**', async route => {
   const request = route.request(), url = new URL(request.url());
+  if (request.method() === 'OPTIONS') return route.fulfill({ status: 204, headers: { 'Access-Control-Allow-Origin': '*', 'Access-Control-Allow-Headers': '*', 'Access-Control-Allow-Methods': 'GET,POST,OPTIONS' } });
+  if (url.pathname === '/api/auth/login') return route.fulfill({
+    json: { accessToken: 'fixture.jwt.admin', tokenType: 'Bearer' }, headers: { 'Access-Control-Allow-Origin': '*' },
+  });
   if (request.method() !== 'GET') { writes.push(request.url()); await route.abort(); return; }
   const path = url.pathname;
   const data = path === '/api/admin/console/session' ? { authenticated: true, principal: 'fixture-admin', email: null, authorities: ['ROLE_ADMIN'] } : path === '/api/companies' ? [company] : path === '/api/securities' ? [security] : path.endsWith('/aliases') ? [{ id: 1, alias: 'Acme Legacy', aliasType: 'FORMER_NAME' }] : path === '/api/health' ? { status: 'UP', service: 'financial-data-api' } : path === '/api/data-sources' ? [source] : path === '/api/ingestion-jobs' ? [job] : path === '/api/ingestions' ? [run] : path === `/api/ingestions/${run.id}` ? run : path === '/api/raw-payloads' ? [{ id: 'raw-1', ingestionRunId: run.id, dataSourceId: 1, contentType: 'application/json' }] : path === '/api/raw-payloads/raw-1' ? { id: 'raw-1', ingestionRunId: run.id, dataSourceId: 1, contentType: 'application/json', fetchedAt: run.createdAt, createdAt: run.createdAt, checksumSha256: 'a'.repeat(64), body: null } : path === '/api/admin/console/data/validation_results' ? { rows: [{ id: 'validation-1', validation_rule_id: '1', rule_code: 'RAW_REQUIRED', raw_payload_id: 'raw-1', ingestion_run_id: run.id, severity: 'ERROR', result_status: 'FAIL', handling_status: 'OPEN', message: 'Required field missing', observed_value: 'null', expected_value: 'value', checked_at: run.createdAt, resolved_by_user_id: null, resolved_at: null, resolution_note: 'Check source mapping' }], total: 1 } : path === '/api/admin/console/data/data_versions' ? { rows: [{ id: 'version-2', data_domain: 'MARKET_PRICE', version_code: 'VERSION-2', status: 'REJECTED', parent_data_version_id: 'version-1', ingestion_run_id: run.id, created_at: run.createdAt, activated_at: null, checksum_sha256: 'b'.repeat(64), row_count: '2' }, { id: 'version-1', version_code: 'VERSION-1', status: 'ACTIVE', parent_data_version_id: null, ingestion_run_id: run.id, created_at: run.createdAt }], total: 2 } : path === '/api/admin/validation/rules' ? [{ id: 1, code: 'RAW_REQUIRED', name: 'Required fields', dataDomain: 'MARKET_PRICE', severity: 'ERROR', ruleType: 'SCHEMA', isActive: true, ruleConfig: {}, createdAt: run.createdAt, updatedAt: run.createdAt }] : [];
@@ -37,7 +41,9 @@ const review = async () => { const reason = page.getByLabel('Lý do vận hành 
 const available = async () => assert.equal(await button('Xác nhận và thực hiện').isDisabled(), false);
 try {
   await page.goto(`http://127.0.0.1:${server.address().port}`);
-  if (await page.getByLabel('Token admin', { exact: true }).count()) { await page.getByLabel('Token admin', { exact: true }).fill('isolated-ui-test-token-at-least-32-characters'); await button('Kết nối').click(); }
+  await page.getByLabel('Tên đăng nhập').fill('fixture-admin');
+  await page.getByLabel('Mật khẩu').fill('fixture-password');
+  await button('Đăng nhập').click();
   await button('Job & nguồn').click();
   await button('Tạo job').click(); await review();
   assert.ok(await page.getByText('Trường này bắt buộc.', { exact: true }).count());

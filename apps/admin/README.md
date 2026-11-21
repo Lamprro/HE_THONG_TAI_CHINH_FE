@@ -48,7 +48,7 @@ Default Java origin: http://localhost:8080. API errors stay visible; the applica
 
 ## Admin operations
 
-Connect to Java with its dedicated admin bearer token, kept only in memory. Java enforces access; the shared token does not identify an individual human. `VITE_API_BASE_URL` points only to Java and must never contain credentials. Jobs includes inactive definitions and reviewed edit/enable/one-off actions.
+Sign in to Java with an Admin username and password. Java reads the role from the account and issues a 15-minute JWT, which the dashboard keeps in memory. `VITE_API_BASE_URL` points only to Java and must never contain credentials. Jobs includes inactive definitions and reviewed edit/enable/one-off actions.
 
 Structured data workflows run source → validation → selected-version canonical build, or resume a saved source. Durable commands expose progress, native diagnostics, queued cancellation and reviewed retries. Dedicated AI screens expose forecast preview, NEWS, recovery review/analysis and immutable prompt versions. Admin history, audit, exact data filters and scoped scheduling supplement the native API catalog. Scheduling defaults off. See [October 20 workflow report](docs/ADMIN_FLOWS_20261020.md) for actual evidence and boundaries.
 
@@ -66,7 +66,7 @@ Documentation: [API matrix](docs/API_INTEGRATION_MATRIX.md), [backend gaps](docs
 # Admin control update (2026-10-19)
 
 Read [current admin capabilities and verification](docs/ADMIN_CONTROL_20261019.md).
-Connect with the backend origin and its dedicated admin token. The token is kept
+Sign in with your Admin username and password. The JWT issued by Java is kept
 only in browser memory. New hosting is intentionally not created; the user's
 instruction is to merge the FE changes only.
 
@@ -81,7 +81,7 @@ results remain admin-only and do not imply production approval. Large suite mani
 features and provider call payloads are omitted. Missing tables are disabled in the catalog.
 
 For real localhost read-only acceptance, build first and run `node tests/research-live.mjs`
-with `ADMIN_API_TOKEN` in the process environment and `ADMIN_API_BASE` pointing to
+with a freshly issued JWT as `ADMIN_API_TOKEN` in the process environment and `ADMIN_API_BASE` pointing to
 localhost (default port 8094). The test requires all five new datasets, stored FPT
 inputs, disabled admin workers and a read-only Java datasource. Port 5173 must be
 free and allowed by CORS. It uses installed Chrome, performs GETs only, and never

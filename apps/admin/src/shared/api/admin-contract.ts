@@ -1,3 +1,9 @@
+export type AdminLogin = {
+  accessToken: string;
+  tokenType: 'Bearer';
+  expiresAt: string;
+};
+
 export type AdminSession = {
   authenticated: boolean;
   principal: string;

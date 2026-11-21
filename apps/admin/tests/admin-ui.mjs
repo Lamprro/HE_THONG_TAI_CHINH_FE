@@ -15,7 +15,9 @@ const server = createServer(async (req, res) => {
 await new Promise(r => server.listen(0, '127.0.0.1', r));
 const browser = await chromium.launch({ headless: true, channel: process.env.PLAYWRIGHT_CHANNEL || 'chrome' });
 const page = await browser.newPage({ viewport: { width: 1440, height: 1000 } });
-const writes = [], errors = []; const token = 'isolated-browser-admin-fixture-at-least-32-characters';
+const writes = [], errors = [];
+const token = 'fixture.jwt.admin';
+const username = 'fixture-admin', password = 'fixture-password';
 const job = { id: '00000000-0000-0000-0000-000000000001', code: 'MARKET_PRICE_BUILD', name: 'Build canonical prices', datasetType: 'MARKET_PRICE', dataSourceCode: 'VN', dataSourceId: 1, active: false, maxRetries: 10, timeoutSeconds: 120, parameters: {}, createdAt: '2026-10-19T00:00:00Z' };
 const commandId = '00000000-0000-0000-0000-000000000002';
 let command, polls = 0;
@@ -24,6 +26,13 @@ await page.route('**/api/**', async route => {
   const request = route.request(), url = new URL(request.url()), path = url.pathname;
   const reply = (body, status = 200) => route.fulfill({ status, json: body, headers: { 'Access-Control-Allow-Origin': '*', 'Access-Control-Allow-Headers': '*', 'Access-Control-Allow-Methods': 'GET,POST,PUT,PATCH,OPTIONS' } });
   if (request.method() === 'OPTIONS') return reply({});
+  if (path === '/api/auth/login') {
+    assert.equal(request.method(), 'POST');
+    assert.equal(request.headers().authorization, undefined);
+    const credentials = request.postDataJSON();
+    if (credentials.username !== username || credentials.password !== password) return reply({}, 401);
+    return reply({ accessToken: token, tokenType: 'Bearer', expiresAt: new Date(Date.now() + 900000).toISOString() });
+  }
   if (path !== '/api/health' && request.headers().authorization !== `Bearer ${token}`) return reply({ message: 'Admin credential required' }, 403);
   if (request.method() !== 'GET') {
     const body = request.postDataJSON(); writes.push({ path, method: request.method(), body });
@@ -45,9 +54,10 @@ await page.route('**/api/**', async route => {
 const button = name => page.getByRole('button', { name, exact: true });
 try {
   await page.goto(`http://127.0.0.1:${server.address().port}`);
-  await page.getByLabel('Token admin', { exact: true }).fill('wrong-credential-at-least-32-characters'); await button('Kết nối').click();
+  await page.getByLabel('Tên đăng nhập').fill(username);
+  await page.getByLabel('Mật khẩu').fill('wrong-password'); await button('Đăng nhập').click();
   await page.getByRole('alert').waitFor(); assert.equal(writes.length, 0);
-  await page.getByLabel('Token admin', { exact: true }).fill(token); await button('Kết nối').click();
+  await page.getByLabel('Mật khẩu').fill(password); await button('Đăng nhập').click();
   await button('Luồng dữ liệu').click(); await page.getByLabel('Cách xử lý', { exact: true }).selectOption('RUN_JOB'); await page.getByLabel('Workflow/job', { exact: true }).selectOption(job.id);
   await page.getByLabel('Lý do xử lý', { exact: true }).fill('Rebuild reviewed prices'); await button('Kiểm tra phạm vi').click();
   await button('Xác nhận chạy luồng').dblclick(); await page.getByText('SUCCEEDED', { exact: true }).first().waitFor({ timeout: 10000 });
@@ -66,7 +76,8 @@ try {
   assert.equal(writes.length, 2); assert.equal(writes[1].path, '/api/admin/catalog/master-data/seed');
   assert.equal(await page.evaluate(() => localStorage.length + sessionStorage.length), 0);
   await page.setViewportSize({ width: 390, height: 844 }); assert.equal(await page.evaluate(() => document.documentElement.scrollWidth <= innerWidth), true);
-  await button('Ngắt kết nối').click(); await page.getByRole('heading', { name: 'Kết nối quản trị' }).waitFor();
+  await button('Đăng xuất').click(); await page.getByRole('heading', { name: 'Đăng nhập quản trị' }).waitFor();
+  assert.equal(await page.getByLabel('Mật khẩu').inputValue(), '');
   assert.deepEqual(errors, []);
   console.log('ADMIN UI PASS: denied login, token-only memory, disabled-job command, double-submit guard, polling, exact decimals, pagination, error details, explicit catalog action, mobile and logout. All API responses are intercepted fixtures; no provider/LLM/database writes.');
 } finally { await browser.close(); await new Promise(r => server.close(r)); }
