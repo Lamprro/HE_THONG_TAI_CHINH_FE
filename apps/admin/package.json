@@ -5,7 +5,7 @@
   "type": "module",
   "scripts": {
     "dev": "vite",
-    "build": "tsc -b && vite build",
+    "build": "node ../../scripts/check-env.mjs && tsc -b && vite build",
     "typecheck": "tsc -b",
     "preview": "vite preview",
     "test": "node --import ./tests/register.mjs --test tests/*.test.mjs",

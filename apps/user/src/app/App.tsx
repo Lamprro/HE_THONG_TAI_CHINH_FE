@@ -14,6 +14,8 @@ const MacroPage = lazy(() => import('../features/Macro').then(module => ({ defau
 const AiCenterPage = lazy(() => import('../features/AiCenter').then(module => ({ default: module.AiCenterPage })));
 const IndexPage = lazy(() => import('../features/IndexPage').then(module => ({ default: module.IndexPage })));
 const ScreenerPage = lazy(() => import('../features/Screener').then(module => ({ default: module.ScreenerPage })));
+const CompaniesListPage = lazy(() => import('../features/CompanyPage').then(module => ({ default: module.CompaniesListPage })));
+const CompanyDetailPage = lazy(() => import('../features/CompanyPage').then(module => ({ default: module.CompanyDetailPage })));
 
 class ErrorBoundary extends Component<{ children: ReactNode }, { failed: boolean }> {
   state = { failed: false };
@@ -39,6 +41,7 @@ const navigation = [
   ] },
   { group: 'THÔNG TIN', items: [
     { path: '/news', label: 'Tin tức', icon: Newspaper, match: '/news/' },
+    { path: '/companies', label: 'Doanh nghiệp', icon: Landmark, match: '/company/' },
   ] },
 ];
 
@@ -54,6 +57,8 @@ function route(path: string, params: URLSearchParams): ReactNode {
   if (path === '/compare') return <ComparePage initial={params.get('symbols') || ''} />;
   if (path === '/news') return <><div className="page-heading"><div><p className="eyebrow">THÔNG TIN & DOANH NGHIỆP</p><h1>Nhịp thị trường</h1><p>Đọc tin và theo dõi các cập nhật từ nguồn.</p></div></div><NewsPage /></>;
   if (path.startsWith('/news/')) return <ArticlePage key={path} id={decode(path.slice(6))} />;
+  if (path === '/companies') return <CompaniesListPage />;
+  if (path.startsWith('/company/')) return <CompanyDetailPage key={path} id={decode(path.slice(9))} />;
   return <div className="state"><h1>Không tìm thấy trang</h1><a href="#/market">Về tổng quan</a></div>;
 }
 

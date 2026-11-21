@@ -28,8 +28,10 @@ export const keyMetricCodes = ['PRICE_TO_EARNINGS', 'PRICE_TO_BOOK', 'EPS', 'BVP
 
 export function DataStatusCard({ status }: { status?: DataStatus }) {
   if (!status) return null;
-  const ok = status.availability !== 'PARTIAL' && status.availability !== 'UNAVAILABLE';
-  return <section className="panel"><div className="panel-heading"><div><h2>Trạng thái dữ liệu</h2><span className="muted">Độ phủ dữ liệu đã lưu trong hệ thống cho mã này</span></div><span className={'status-chip ' + (ok ? 'ok' : 'warn')}>{ok ? <CheckCircle2 size={14} /> : <CircleAlert size={14} />}{availabilityNames[status.availability] || status.availability}</span></div>
+  const isFull = status.availability === 'FULL' || status.availability === 'AVAILABLE';
+  const isUnverified = status.availability === 'AVAILABLE_WITH_UNVERIFIED_HISTORY';
+  const chipClass = isFull ? 'status-chip ok' : isUnverified ? 'status-chip warn' : 'status-chip bad';
+  return <section className="panel"><div className="panel-heading"><div><h2>Trạng thái dữ liệu</h2><span className="muted">Độ phủ dữ liệu đã lưu trong hệ thống cho mã này</span></div><span className={chipClass}>{isFull ? <CheckCircle2 size={14} /> : <CircleAlert size={14} />}{availabilityNames[status.availability] || status.availability}</span></div>
     <div className="coverage-grid">
       <div><span>Giá ngày</span><strong>{decimal(status.prices.count)}</strong><small>{date(status.prices.firstTimestamp)} → {date(status.prices.lastTimestamp)}</small></div>
       <div><span>Báo cáo tài chính</span><strong>{decimal(status.statements.count)}</strong><small>Kỳ {date(status.statements.firstPeriodEnd)} → {date(status.statements.lastPeriodEnd)}</small></div>
@@ -37,7 +39,7 @@ export function DataStatusCard({ status }: { status?: DataStatus }) {
       <div><span>Tin tức</span><strong>{decimal(status.news.count)}</strong><small>Tin mới nhất {date(status.news.lastPublishedAt)}</small></div>
     </div>
     {status.limitations.length > 0 && <div className="limitations">{status.limitations.map(item => <span key={item}>{limitationNames[item] || item}</span>)}</div>}
-    <Note>Lưu lần cuối: giá {date(status.prices.lastStoredAt)}, báo cáo {date(status.statements.lastStoredAt)}. Độ phủ không chứng nhận đủ mọi phiên/kỳ; dữ liệu point-in-time {status.pointInTimeCertified ? 'đã' : 'chưa'} được chứng nhận.</Note>
+    <Note>Lưu lần cuối: giá {date(status.prices.lastStoredAt)}, báo cáo {date(status.statements.lastStoredAt)}.{isUnverified ? ' Lưu ý: Độ phủ bao gồm các phiên giá lịch sử chưa qua đối chiếu kiểm chứng tài liệu gốc.' : ''} Độ phủ không chứng nhận đủ mọi phiên/kỳ; dữ liệu point-in-time {status.pointInTimeCertified ? 'đã' : 'chưa'} được chứng nhận.</Note>
   </section>;
 }
 
@@ -60,14 +62,15 @@ function QuarterlyBars({ symbol, exchange }: { symbol: string; exchange: string 
   </section>;
 }
 
-export function KeyMetrics({ symbol, exchange }: { symbol: string; exchange: string }) {
+export function KeyMetrics({ symbol, exchange }: { symbol: string; exchange: string; initialMetrics?: Row[] }) {
   const query = useQuery({ queryKey: ['compare-self', symbol, exchange], staleTime: 1_800_000, queryFn: ({ signal }) => apiData<Compare>('compare', [], { symbols: symbol, exchange, codes: keyMetricCodes.join(','), origin: 'PROVIDER' }, signal) });
   const derived = useQuery({ queryKey: ['compare-self-derived', symbol, exchange], staleTime: 1_800_000, queryFn: ({ signal }) => apiData<Compare>('compare', [], { symbols: symbol, exchange, codes: keyMetricCodes.join(','), origin: 'DERIVED' }, signal) });
-  const metrics = [...(query.data?.data.securities[0]?.metrics || []), ...(derived.data?.data.securities[0]?.metrics || [])];
-  const defs = [...(query.data?.data.definitions || []), ...(derived.data?.data.definitions || [])];
+
+  const metrics = [...(query.data?.data?.securities?.[0]?.metrics || []), ...(derived.data?.data?.securities?.[0]?.metrics || [])];
+  const defs = [...(query.data?.data?.definitions || []), ...(derived.data?.data?.definitions || [])];
   const rows = keyMetricCodes.map(code => metrics.find(m => m.metricCode === code && m.metricState === 'AVAILABLE')).filter(Boolean) as Compare['securities'][0]['metrics'];
-  return <section className="panel"><div className="panel-heading"><div><h2>Chỉ số chính</h2><span className="muted">Giá trị mới nhất đã lưu theo từng chỉ số (nguồn cung cấp hoặc Java tính)</span></div></div>
-    <QueryState loading={query.isPending} error={query.error} empty={!rows.length} retry={query.refetch}><div className="metric-tiles">{rows.map(m => <div key={m.metricCode + text(m.derived)} className="metric-tile"><span>{defs.find(d => d.code === m.metricCode)?.name || m.metricCode}</span><strong>{decimal(m.value === null ? null : Number(m.value).toFixed(2))}<small>{m.unit}</small></strong><small>{date(m.asOfDate)} · {m.derived ? 'Java tính' : text(m.sourceCode)}</small></div>)}</div></QueryState>
+  return <section className="panel"><div className="panel-heading"><div><h2>Chỉ số chính</h2><span className="muted">Giá trị mới nhất đã lưu theo từng chỉ số chuẩn hóa (P/E, P/B, ROE, ROA...)</span></div></div>
+    <QueryState loading={query.isPending || derived.isPending} error={query.error || derived.error} empty={!rows.length} retry={() => { void query.refetch(); void derived.refetch(); }}><div className="metric-tiles">{rows.map(m => <div key={m.metricCode + text(m.derived)} className="metric-tile"><span>{defs.find(d => d.code === m.metricCode)?.name || m.metricCode}</span><strong>{decimal(m.value === null ? null : Number(m.value).toFixed(2))}<small>{m.unit}</small></strong><small>{date(m.asOfDate)} · {m.derived ? 'Java tính' : text(m.sourceCode)}</small></div>)}</div></QueryState>
   </section>;
 }
 
@@ -78,7 +81,7 @@ export function OverviewPanel({ symbol, exchange, openTab }: { symbol: string; e
   return <QueryState loading={query.isPending} error={query.error} retry={query.refetch}>
     <div className="overview-grid">
       <div>
-        <KeyMetrics symbol={symbol} exchange={exchange} />
+        <KeyMetrics symbol={symbol} exchange={exchange} initialMetrics={data?.metrics?.items} />
         <QuarterlyBars symbol={symbol} exchange={exchange} />
         <section className="panel"><div className="panel-heading"><h2>Tin mới</h2><button onClick={() => openTab('news')}>Xem tất cả</button></div>
           {data?.news.items.length ? <ul className="plain-list">{data.news.items.map(item => <li key={item.id}><a href={'#/news/' + encodeURIComponent(item.id)}>{item.title}</a><small>{item.sourceName} · {date(item.publishedAt)}</small></li>)}</ul> : <div className="state"><strong>Chưa có tin liên kết</strong></div>}

@@ -19,6 +19,7 @@ export function AiCenterPage() {
   const [symbol, setSymbol] = useState('');
   const a = availability.data?.data;
   const suite = a?.localAi.registeredSuite?.data;
+
   return <>
     <div className="page-heading"><div><p className="eyebrow">PHÂN TÍCH BẰNG AI</p><h1>Trung tâm AI</h1><p>Tình trạng các luồng AI: phân tích tin (LLM), kịch bản tài chính (LLM) và bộ mô hình Local AI theo quý.</p></div></div>
     <QueryState loading={availability.isPending} error={availability.error} retry={availability.refetch}>
@@ -28,6 +29,7 @@ export function AiCenterPage() {
         <article className="ai-status"><Bot size={18} /><h3>Local AI</h3><strong className="reference">{suite?.state || a?.localAi.publicPredictionReader}</strong><small>Gói {suite?.package ? suite.package.id.slice(0, 8) + '… đăng ký ' + date(suite.package.registeredAt) : 'chưa có'} · đọc dự đoán công khai: {a?.localAi.publicPredictionReader} ({a?.localAi.reason})</small></article>
       </div>
     </QueryState>
+
     <section className="panel"><div className="panel-heading"><div><h2>Bộ mô hình Local AI</h2><span className="muted">{catalog.data ? `${catalog.data.total} mô hình trong gói nghiên cứu mới nhất` : 'Danh mục mô hình'}</span></div>
       <form className="toolbar" onSubmit={event => { event.preventDefault(); if (/^[A-Za-z0-9]{1,20}$/.test(symbol.trim())) window.location.hash = '/securities?search=' + encodeURIComponent(symbol.trim().toUpperCase()); }}><input aria-label="Xem Local AI theo mã" value={symbol} onChange={e => setSymbol(e.target.value)} placeholder="Mã, vd FPT" /><button type="submit">Tìm mã</button></form></div>
       <QueryState loading={catalog.isPending} error={catalog.error} empty={!catalog.data?.items.length} retry={catalog.refetch}><div className="table-scroll"><table><thead><tr><th>Mô hình</th><th>Nhóm</th><th>Kỳ</th><th>Thuật toán chọn</th><th>Đầu ra</th><th className="number">Input đã đăng ký</th><th className="number">Kết quả nghiên cứu</th><th>Dữ liệu</th><th>Cổng dev</th></tr></thead>

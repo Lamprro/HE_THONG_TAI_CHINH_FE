@@ -4,6 +4,7 @@ import { ArrowUpRight, Bot, Newspaper, Search } from 'lucide-react';
 import { apiData, apiPage, type Article, type Row } from '../shared/api';
 import { date, fixed, safeUrl, signed, text } from '../shared/format';
 import { useLiveQuotes } from '../shared/live';
+import { AiNewsAnalysisCard } from './AiNewsAnalysis';
 import { Note, Pagination, QueryState, securityLink } from '../shared/ui';
 
 type ArticleDetail = Article & { author?: string | null; crawledAt?: string | null; contentTruncated?: boolean; companies?: { companyId: string; companyName: string; symbol: string; exchange: string; matchMethod: string; associationType: string }[]; companyLinksTruncated?: boolean };
@@ -28,10 +29,10 @@ export function NewsPage({ symbol, exchange }: { symbol?: string; exchange?: str
   </section>;
 }
 
-function NewsAnalysis({ id }: { id: string }) {
+function NewsAnalysis({ id, articleTitle }: { id: string; articleTitle?: string }) {
   const query = useQuery({ queryKey: ['news-analysis', id], staleTime: 900_000, queryFn: ({ signal }) => apiData<Row[]>('newsAnalysis', [id], {}, signal) });
   return <section className="panel"><div className="panel-heading"><div><h2><Bot size={16} />Phân tích AI của bài</h2><span className="muted">Chỉ kết quả đã qua kiểm định và còn khớp nội dung nguồn</span></div></div>
-    <QueryState loading={query.isPending} error={query.error} retry={query.refetch}>{query.data?.data.length ? <div className="analysis-list">{query.data.data.map((row, i) => <article key={text(row.id, String(i))}><dl className="stats">{Object.entries(row).filter(([, v]) => v !== null && typeof v !== 'object').map(([k, v]) => <div key={k}><dt>{k}</dt><dd>{text(typeof v === 'boolean' ? String(v) : v)}</dd></div>)}</dl>{Object.entries(row).filter(([, v]) => v !== null && typeof v === 'object').map(([k, v]) => <details key={k}><summary>{k}</summary><pre>{JSON.stringify(v, null, 2).slice(0, 4000)}</pre></details>)}</article>)}</div> : <div className="state"><strong>Chưa có phân tích được công bố cho bài này</strong><span>Trang không tự gọi mô hình để tạo phân tích.</span></div>}</QueryState>
+    <QueryState loading={query.isPending} error={query.error} retry={query.refetch}>{query.data?.data.length ? <div className="analysis-list">{query.data.data.map((row, i) => <AiNewsAnalysisCard key={text(row.id, String(i))} row={row} articleTitle={articleTitle} />)}</div> : <div className="state"><strong>Chưa có phân tích được công bố cho bài này</strong><span>Trang không tự gọi mô hình để tạo phân tích.</span></div>}</QueryState>
   </section>;
 }
 
@@ -45,7 +46,7 @@ export function ArticlePage({ id }: { id: string }) {
     <section className="panel article"><a className="back-link" href="#/news">← Tin tức</a><QueryState loading={query.isPending} error={query.error} retry={query.refetch}><p className="eyebrow">{article?.sourceName} · {date(article?.publishedAt)}{article?.author ? ' · ' + article.author : ''}</p><h1>{article?.title}</h1>{article?.sapo && <p className="article-lead">{article.sapo}</p>}<div className="article-body">{article?.contentText || 'Nguồn hiện chỉ có liên kết bài viết. Bạn có thể đọc nội dung tại trang gốc.'}</div>{article?.contentTruncated && <p className="inline-alert">Nội dung dài đã được rút gọn, đọc bản đầy đủ tại nguồn.</p>}{url && <a className="button" href={url} target="_blank" rel="noopener noreferrer">Đọc tại nguồn <ArrowUpRight size={15} /></a>}</QueryState></section>
     <aside>
       <section className="panel"><div className="panel-heading"><h2>Mã liên quan</h2></div>{companies.length ? <ul className="plain-list">{companies.map(c => { const q = quotes.data?.[c.symbol]; const tone = q?.change == null ? '' : q.change > 0 ? 'positive' : q.change < 0 ? 'negative' : 'reference'; return <li key={c.companyId + c.symbol}><a href={securityLink(c.symbol, c.exchange)}><strong>{c.symbol}</strong> · {c.exchange} <span className={tone}>{fixed(q?.price)} {signed(q?.changePercent, 2, '%')}</span></a><small>{c.companyName} · liên kết {c.associationType === 'SOURCE_JOB' ? 'theo nguồn thu thập' : c.matchMethod}</small></li>; })}</ul> : <div className="state"><strong>Chưa liên kết doanh nghiệp</strong></div>}</section>
-      <NewsAnalysis id={id} />
+      <NewsAnalysis id={id} articleTitle={article?.title} />
     </aside>
   </div>;
 }

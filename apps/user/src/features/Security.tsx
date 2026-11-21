@@ -2,7 +2,7 @@ import { useMemo, useState } from 'react';
 import { useQuery } from '@tanstack/react-query';
 import { ArrowLeft, RefreshCw } from 'lucide-react';
 import { apiData, apiPage, type Price, type Row, type Security } from '../shared/api';
-import { compactVolume, date, decimal, fixed, int, safeUrl, signed, text, tradingToday } from '../shared/format';
+import { compactVolume, date, decimal, fixed, int, safeUrl, signed, text, tradingToday, trimmed } from '../shared/format';
 import { priceTone } from '../shared/live-parse';
 import { chartRanges, liveEnabled, liveSources, useCandles, useLiveQuotes, type Candle, type ChartRange, type LiveQuote } from '../shared/live';
 import { getQuote } from '../shared/quotes';
@@ -11,7 +11,7 @@ import { CandleChart } from './CandleChart';
 import { NewsPage } from './News';
 import { PriceChart } from './PriceChart';
 import { OverviewPanel } from './SecurityOverview';
-import { FinancialMatrixPanel, MetricsPanel } from './SecurityFinance';
+import { FinancialMatrixPanel, LineageDialog, MetricsPanel } from './SecurityFinance';
 import { AiPanel, ForeignPanel, ReferencePanel } from './SecurityExtra';
 
 
@@ -19,6 +19,14 @@ export const securityTabs = [
   ['overview', 'Tổng quan'], ['chart', 'Biểu đồ'], ['financials', 'Tài chính'], ['metrics', 'Chỉ số'], ['foreign', 'Khối ngoại'], ['news', 'Tin tức'], ['ai', 'AI & Dự báo'], ['profile', 'Hồ sơ'],
 ] as const;
 export type SecurityTab = (typeof securityTabs)[number][0];
+
+type DataStatus = {
+  prices: { count: string; firstTimestamp: string | null; lastTimestamp: string | null; lastStoredAt: string | null };
+  statements: { count: string; firstPeriodEnd: string | null; lastPeriodEnd: string | null; missingPublishedAt: string; unknownScope: string; unknownPeriodBasis: string; lastStoredAt: string | null };
+  metrics: { count: string; firstAsOfDate: string | null; lastAsOfDate: string | null; lastStoredAt: string | null };
+  news: { count: string; lastPublishedAt: string | null; lastCrawledAt: string | null };
+  availability: string; limitations: string[]; pointInTimeCertified: boolean;
+};
 
 export function SecurityPage({ symbol, exchange, initialTab }: { symbol: string; exchange: string; initialTab?: string }) {
   const tabs = securityTabs;
@@ -30,6 +38,8 @@ export function SecurityPage({ symbol, exchange, initialTab }: { symbol: string;
   const live = useLiveQuotes([symbol]);
   const quote = live.data?.[symbol];
   const status = (profile.error as { status?: number } | null)?.status;
+  const dataStatus = useQuery({ queryKey: ['data-status', symbol, exchange], enabled: status !== 404 && status !== 409, staleTime: 900_000, queryFn: ({ signal }) => apiData<DataStatus>('dataStatus', [symbol], { exchange: exchange || undefined }, signal) });
+  const ds = dataStatus.data?.data;
   const shownExchange = exchange || security?.exchange || quote?.market || '';
   useTitle(`${symbol}${quote?.price != null ? ' ' + fixed(quote.price) + ' ' + signed(quote.changePercent, 2, '%') : ''} · ${security?.companyName || 'Cổ phiếu'}`);
   return <>
@@ -41,6 +51,17 @@ export function SecurityPage({ symbol, exchange, initialTab }: { symbol: string;
     {status === 409 ? <ExchangePicker symbol={symbol} />
       : status === 404 ? <LiveOnly symbol={symbol} quote={quote} />
       : <QueryState loading={profile.isPending} error={profile.error} retry={profile.refetch}>
+      {ds && (
+        <div className="status-banner" style={{ display: 'flex', flexWrap: 'wrap', gap: '0.75rem', alignItems: 'center', background: 'var(--surface-2, #1a1a24)', padding: '0.4rem 0.8rem', borderRadius: '6px', fontSize: '0.85rem', marginBottom: '0.75rem' }}>
+          <span className="muted">Dữ liệu hệ thống:</span>
+          <span>Giá đến: <b>{date(ds.prices.lastTimestamp)}</b> ({decimal(ds.prices.count)} phiên)</span>
+          <span>BCTC đến: <b>{date(ds.statements.lastPeriodEnd)}</b> ({decimal(ds.statements.count)} kỳ)</span>
+          <span>Chỉ số đến: <b>{date(ds.metrics.lastAsOfDate)}</b></span>
+          <span className={'status-chip ' + (ds.availability === 'PARTIAL' ? 'warn' : 'ok')} style={{ marginLeft: 'auto' }}>
+            {ds.availability === 'PARTIAL' ? 'Một phần' : 'Đầy đủ'}
+          </span>
+        </div>
+      )}
       <nav className="tabs" aria-label="Thông tin cổ phiếu">{tabs.map(([value, label]) => <button key={value} className={tab === value ? 'active' : ''} aria-current={tab === value ? 'page' : undefined} onClick={() => setTab(value)}>{label}</button>)}</nav>
       {tab === 'overview' && <OverviewPanel symbol={symbol} exchange={exchange} openTab={value => setTab(value as SecurityTab)} />}
       {tab === 'chart' && <ChartPanel symbol={symbol} exchange={exchange} quote={quote} />}
@@ -85,15 +106,23 @@ function QuoteBox({ symbol, exchange, quote, liveDone, hasStored, loading, error
       <small>Trực tiếp · {liveSources.board}<button className="icon-button" disabled={loading} onClick={refresh} aria-label="Cập nhật giá"><RefreshCw size={13} /></button></small>
     </div>;
   }
-  if (!needStored) return <div className="quote"><strong>—</strong><span>{liveDone ? 'Chưa có giá' : 'Đang lấy giá…'}</span></div>;
+  if (!needStored) return <div className="quote"><strong>—</strong><span>{liveDone ? (error ? 'Nguồn trực tiếp lỗi: ' + error.message : 'Chưa có giá trực tiếp') : (!liveEnabled ? 'Nguồn trực tiếp đang tắt' : 'Đang lấy giá…')}</span></div>;
   return <div className="quote"><strong>{decimal(stored.data?.price)} <small>{stored.data?.currency}</small></strong><span>Giá đã lưu · {date(stored.data?.asOf)}</span><small>{stored.data?.source}</small>
     {(error || !liveEnabled) && <small className="negative" role="alert">{liveEnabled ? 'Nguồn trực tiếp chưa phản hồi: ' + error?.message : 'Nguồn trực tiếp đang tắt'}</small>}</div>;
 }
 
 function storedCandles(prices: Price[]): Candle[] {
-  return prices.filter(p => p.close !== null && p.open && p.high && p.low).map(p => ({
-    time: Date.parse(p.timestamp) / 1000, open: Number(p.open) / 1000, high: Number(p.high) / 1000, low: Number(p.low) / 1000, close: Number(p.close) / 1000, volume: Number(p.volume || 0),
-  }));
+  return prices.filter(p => p.close !== null && p.open && p.high && p.low).map(p => {
+    const divisor = (!p.currency || p.currency === 'VND') ? 1000 : 1;
+    return {
+      time: Date.parse(p.timestamp) / 1000,
+      open: Number(p.open) / divisor,
+      high: Number(p.high) / divisor,
+      low: Number(p.low) / divisor,
+      close: Number(p.close) / divisor,
+      volume: Number(p.volume ?? 0) || 0,
+    };
+  });
 }
 
 function ChartPanel({ symbol, exchange, quote, storedHistory = true }: { symbol: string; exchange: string; quote?: LiveQuote; storedHistory?: boolean }) {
@@ -101,10 +130,25 @@ function ChartPanel({ symbol, exchange, quote, storedHistory = true }: { symbol:
   const live = useCandles(symbol, range);
   const intraday = ['1D', '5D', '1M'].includes(range);
   const fallback = storedHistory && (!liveEnabled || Boolean(live.error));
-  const days = Math.min(chartRanges.find(r => r.key === range)?.days || 183, 700);
+  const days = chartRanges.find(r => r.key === range)?.days || 183;
   const to = tradingToday();
   const fromDate = new Date(to + 'T00:00:00Z'); fromDate.setUTCDate(fromDate.getUTCDate() - Math.max(days, 31));
-  const stored = useQuery({ queryKey: ['prices', symbol, exchange, fromDate.toISOString().slice(0, 10), to, 0], enabled: fallback, staleTime: 1_800_000, queryFn: ({ signal }) => apiPage<Price>('prices', [symbol], { exchange, from: fromDate.toISOString().slice(0, 10), to, interval: '1d', size: 500, page: 0 }, signal) });
+  const stored = useQuery({
+    queryKey: ['prices', symbol, exchange, fromDate.toISOString().slice(0, 10), to],
+    enabled: fallback,
+    staleTime: 1_800_000,
+    queryFn: async ({ signal }) => {
+      let page = 0;
+      let allItems: Price[] = [];
+      while (page < 4) {
+        const res = await apiPage<Price>('prices', [symbol], { exchange, from: fromDate.toISOString().slice(0, 10), to, interval: '1d', size: 500, page }, signal);
+        allItems = allItems.concat(res.items || []);
+        if (!res.hasNext || !res.items || res.items.length < 500) break;
+        page++;
+      }
+      return { items: allItems, total: allItems.length, page: 0, size: allItems.length, totalPages: 1, hasNext: false };
+    },
+  });
   const candles = useMemo(() => fallback ? storedCandles(stored.data?.items || []) : live.data || [], [fallback, stored.data, live.data]);
   const pending = fallback ? stored.isPending : live.isPending;
   return <>
@@ -133,18 +177,29 @@ function OrderBook({ quote }: { quote?: LiveQuote }) {
 function StoredPricePanel({ symbol, exchange }: { symbol: string; exchange: string }) {
   const [days, setDays] = useState(180);
   const [page, setPage] = useState(0);
+  const [lineagePriceId, setLineagePriceId] = useState('');
   const to = tradingToday();
   const fromDate = new Date(to + 'T00:00:00Z');
   fromDate.setUTCDate(fromDate.getUTCDate() - days);
   const from = fromDate.toISOString().slice(0, 10);
   const query = useQuery({ queryKey: ['prices', symbol, exchange, from, to, page], staleTime: 1_800_000, queryFn: ({ signal }) => apiPage<Price>('prices', [symbol], { exchange, from, to, interval: '1d', size: 500, page }, signal) });
-  return <section className="panel"><div className="panel-heading"><div><h2>Giá đóng cửa đã lưu trong hệ thống</h2><span className="muted">Đơn vị {query.data?.items[0]?.currency || 'theo nguồn'} · có nguồn và cơ sở giá</span></div><div className="segments">{[[30, '1T'], [90, '3T'], [180, '6T'], [365, '1N']].map(([value, label]) => <button className={days === value ? 'selected' : ''} key={value} onClick={() => { setDays(Number(value)); setPage(0); }}>{label}</button>)}</div></div><QueryState loading={query.isPending} error={query.error} empty={!query.data?.items.length} retry={query.refetch}><PriceChart prices={query.data?.items || []} /></QueryState>{query.data && (page > 0 || query.data.hasNext) && <Pagination page={page} hasNext={query.data.hasNext} total={query.data.total} onChange={setPage} />}<Note>Dữ liệu chuẩn hóa từ backend (canonical, phiên bản ACTIVATED). Đường nối ngắt khi nguồn hoặc cơ sở giá thay đổi. Dùng để đối chiếu với giá trực tiếp.</Note></section>;
+  return <section className="panel"><div className="panel-heading"><div><h2>Giá đóng cửa đã lưu trong hệ thống</h2><span className="muted">Đơn vị {query.data?.items[0]?.currency || 'VND'} · có nguồn và cơ sở giá</span></div><div className="segments">{[[30, '1T'], [90, '3T'], [180, '6T'], [365, '1N']].map(([value, label]) => <button className={days === value ? 'selected' : ''} key={value} onClick={() => { setDays(Number(value)); setPage(0); }}>{label}</button>)}</div></div>
+    <QueryState loading={query.isPending} error={query.error} empty={!query.data?.items.length} retry={query.refetch}>
+      <PriceChart prices={query.data?.items || []} />
+      <details style={{ marginTop: '1rem' }}><summary>Bảng chi tiết ({query.data?.items.length || 0} phiên) & Nguồn gốc giá</summary>
+        <div className="table-scroll price-history"><table><thead><tr><th>Phiên</th><th className="number">Mở</th><th className="number">Cao</th><th className="number">Thấp</th><th className="number">Đóng ({query.data?.items[0]?.currency || 'VND'})</th><th className="number">KL</th><th>Nguồn</th><th>Cơ sở</th><th>Hành động</th></tr></thead><tbody>{[...(query.data?.items || [])].reverse().map(p => <tr key={p.id}><td>{date(p.tradingDate)}</td><td className="number">{trimmed(p.open)}</td><td className="number">{trimmed(p.high)}</td><td className="number">{trimmed(p.low)}</td><td className="number">{trimmed(p.close)}</td><td className="number">{trimmed(p.volume)}</td><td>{p.sourceCode}</td><td>{p.priceBasis || '—'}</td><td><button style={{ padding: '0.2rem 0.5rem', fontSize: '0.8rem' }} onClick={() => setLineagePriceId(p.id)}>Nguồn giá</button></td></tr>)}</tbody></table></div>
+      </details>
+    </QueryState>
+    {query.data && (page > 0 || query.data.hasNext) && <Pagination page={page} hasNext={query.data.hasNext} total={query.data.total} onChange={setPage} />}
+    <Note>Dữ liệu chuẩn hóa từ backend (canonical, phiên bản ACTIVATED). Bấm "Nguồn giá" để đối chiếu raw payload, version và nhà cung cấp.</Note>
+    {lineagePriceId && <LineageDialog kind="price" symbol={symbol} exchange={exchange} id={lineagePriceId} onClose={() => setLineagePriceId('')} />}
+  </section>;
 }
 
 function ProfilePanel({ security }: { security?: Security }) {
   const company = security?.company;
   const website = safeUrl(company?.website);
-  return <section className="panel profile"><h2>{security?.companyName}</h2><dl>{[['Ngành', security?.industryName], ['Mã công ty', company?.companyCode], ['Trụ sở', company?.headquarters], ['Ngày thành lập', date(company?.foundedDate)], ['Tiền tệ', security?.currency]].map(([label, value]) => <div key={String(label)}><dt>{String(label)}</dt><dd>{text(value)}</dd></div>)}</dl><p>{text(company?.description, 'Hồ sơ doanh nghiệp chưa có phần giới thiệu.')}</p>{website && <a href={website} target="_blank" rel="noopener noreferrer">Website doanh nghiệp ↗</a>}</section>;
+  return <section className="panel profile"><div className="panel-heading"><h2>{security?.companyName}</h2>{security?.companyId && <a className="button" style={{ padding: '0.25rem 0.6rem', fontSize: '0.85rem' }} href={'#/company/' + encodeURIComponent(security.companyId)}>Xem hồ sơ công ty đầy đủ ↗</a>}</div><dl>{[['Ngành', security?.industryName], ['Mã công ty', company?.companyCode], ['Trụ sở', company?.headquarters], ['Ngày thành lập', date(company?.foundedDate)], ['Tiền tệ', security?.currency]].map(([label, value]) => <div key={String(label)}><dt>{String(label)}</dt><dd>{text(value)}</dd></div>)}</dl><p>{text(company?.description, 'Hồ sơ doanh nghiệp chưa có phần giới thiệu.')}</p>{website && <a href={website} target="_blank" rel="noopener noreferrer">Website doanh nghiệp ↗</a>}</section>;
 }
 
 export type { Row };

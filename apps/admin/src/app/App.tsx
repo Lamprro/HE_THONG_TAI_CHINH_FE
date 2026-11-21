@@ -18,9 +18,14 @@ import { SessionGate } from '../shared/api/SessionGate';
 import { DataBrowser } from '../features/admin/DataBrowser';
 import { NativeApiPage } from '../features/admin/NativeApiPage';
 import { RuntimePage } from '../features/admin/RuntimePage';
+import { FinancialQualityPage } from '../features/data-quality/components/FinancialQualityPage';
+import { MarketDataAdminPage } from '../features/admin/MarketDataAdminPage';
 import { WorkflowPage, type WorkflowSelection } from '../features/admin/WorkflowPage';
 import { AiOperationsPage } from '../features/admin/AiOperationsPage';
 import { OperationsHistory } from '../features/admin/OperationsHistory';
+import { ActiveCommandsBanner } from '../features/admin/ActiveCommandsBanner';
+import { LineageTracerPage } from '../features/admin/LineageTracerPage';
+import { CommandTracker } from '../features/admin/CommandTracker';
 import { SchedulePanel } from '../features/admin/SchedulePanel';
 import { SystemSummary } from '../features/admin/SystemSummary';
 
@@ -51,7 +56,8 @@ function Dashboard() {
   const [workflow, setWorkflow] = useState<WorkflowSelection>({});
   const [historyKind, setHistoryKind] = useState<HistoryKind>('commands');
   const [jobsTab, setJobsTab] = useState<'jobs' | 'sources'>('jobs');
-  const [systemTab, setSystemTab] = useState<'status' | 'api'>('status');
+  const [qualityTab, setQualityTab] = useState<'validation' | 'financial' | 'lineage'>('validation');
+  const [systemTab, setSystemTab] = useState<'status' | 'market' | 'api'>('status');
   const [dark, setDark] = useState(false);
   const [runId, setRunId] = useState<string | null>(null);
   const [issue, setIssue] = useState<ValidationResult | null>(null);
@@ -62,6 +68,7 @@ function Dashboard() {
   const [qualityView, setQualityView] = useState<'validation' | 'versions'>('validation');
   const [qualityRaw, setQualityRaw] = useState<string | null>(null);
   const [qualityRun, setQualityRun] = useState<string | null>(null);
+  const [trackedCommand, setTrackedCommand] = useState<string | null>(null);
   const queryClient = useQueryClient();
   const view: DashboardSection = section === 'overview' || section === 'jobs' || section === 'quality' ? section
     : section === 'history' && historyKind === 'runs' ? 'runs' : 'other';
@@ -106,6 +113,7 @@ function Dashboard() {
         </div>
       </header>
       <div className="connection-strip"><div><span className={`signal ${connection === 'Đã kết nối' ? 'online' : connection === 'Đang kiểm tra' ? '' : 'offline'}`}/><b>Java Backend</b><span>{connection}</span></div></div>
+      <ActiveCommandsBanner onSelectCommand={setTrackedCommand}/>
 
       {section === 'overview' && <>
         <SystemSummary/>
@@ -143,24 +151,34 @@ function Dashboard() {
       {section === 'scope' && <DataScopePage companies={scopeQueries.companies} securities={scopeQueries.securities}/>}
 
       {section === 'quality' && <>
-        <div className="management-toolbar">
-          <div className="header-actions"><button className="light-button" onClick={() => setOperation({ kind: 'validate-pending' })}>Validate dữ liệu chờ</button></div>
-          <span className="subtle">{writeNote}</span>
-        </div>
-        <DataQualityPage key={`${qualityRun}-${qualityRaw}-${qualityView}`} initialTab={qualityView} rawFilter={qualityRaw} onRaw={setRawId} openIssues={issues} results={results} versions={versions} rules={q.rules} onSelect={setIssue} onRun={setRunId} runFilter={qualityRun} clearRunFilter={() => { setQualityRun(null); setQualityRaw(null); }}/>
+        <Tabs value={qualityTab} onChange={setQualityTab} items={[['validation', 'Kiểm tra & Vi phạm'], ['financial', 'Chất lượng BCTC & Công bố'], ['lineage', 'Truy vết nguồn (Lineage)']]}/>
+        {qualityTab === 'validation' ? (
+          <>
+            <div className="management-toolbar">
+              <div className="header-actions"><button className="light-button" onClick={() => setOperation({ kind: 'validate-pending' })}>Validate dữ liệu chờ</button></div>
+              <span className="subtle">{writeNote}</span>
+            </div>
+            <DataQualityPage key={`${qualityRun}-${qualityRaw}-${qualityView}`} initialTab={qualityView} rawFilter={qualityRaw} onRaw={setRawId} openIssues={issues} results={results} versions={versions} rules={q.rules} onSelect={setIssue} onRun={setRunId} runFilter={qualityRun} clearRunFilter={() => { setQualityRun(null); setQualityRaw(null); }}/>
+          </>
+        ) : qualityTab === 'financial' ? (
+          <FinancialQualityPage />
+        ) : (
+          <LineageTracerPage onRun={setRunId} onRaw={setRawId}/>
+        )}
       </>}
 
       {section === 'ai' && <AiOperationsPage onRun={setRunId}/>}
       {section === 'data' && <DataBrowser onRun={setRunId} onRaw={setRawId}/>}
 
       {section === 'system' && <>
-        <Tabs value={systemTab} onChange={setSystemTab} items={[['status', 'Trạng thái & độ phủ'], ['api', 'API quản trị nâng cao']]}/>
-        {systemTab === 'status' ? <><RuntimePage/><SchedulePanel/></> : <NativeApiPage/>}
+        <Tabs value={systemTab} onChange={setSystemTab} items={[['status', 'Trạng thái & độ phủ'], ['market', 'Dữ liệu thị trường'], ['api', 'API quản trị nâng cao']]}/>
+        {systemTab === 'status' ? <><RuntimePage onWorkflow={openWorkflow}/><SchedulePanel/></> : systemTab === 'market' ? <MarketDataAdminPage/> : <NativeApiPage/>}
       </>}
     </div>
     <RunDrawer onRaw={id => { setRunId(null); setRawId(id); }} onIssue={value => { setRunId(null); setIssue(value); }} id={runId} onClose={() => setRunId(null)} onOperation={setOperation} onJob={id => { setRunId(null); openJobs(id); }} onSource={id => { setRunId(null); openSources(id); }} onQuality={id => { setRunId(null); openQuality(id, null, 'validation'); }}/>
-    <ValidationDrawer onRaw={id => { setIssue(null); setRawId(id); }} issue={issue} onClose={() => setIssue(null)} onRun={setRunId}/>
+    <ValidationDrawer onRaw={id => { setIssue(null); setRawId(id); }} issue={issue} onClose={() => setIssue(null)} onRun={setRunId} onWorkflow={openWorkflow}/>
     <RawPayloadDrawer id={rawId} onClose={() => setRawId(null)} onRun={id => { setRawId(null); setRunId(id); }} onIssue={value => { setRawId(null); setIssue(value); }} onOperation={value => { setRawId(null); setOperation(value); }} onQuality={(payloadId, ingestionRunId) => { setRawId(null); openQuality(ingestionRunId, payloadId, 'validation'); }} onVersions={id => { setRawId(null); openQuality(id, null, 'versions'); }}/>
     {operation && <OperationDrawer operation={operation} sources={sources.data} onClose={() => setOperation(null)} onRun={setRunId}/>}
+    {trackedCommand && <CommandTracker id={trackedCommand} onRun={setRunId} onCommand={setTrackedCommand}/>}
   </AdminLayout>;
 }
