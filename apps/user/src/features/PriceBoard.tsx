@@ -41,8 +41,8 @@ export function PriceBoard({ rows, quotes, compact = false }: { rows: BoardRow[]
         {!compact && <th colSpan={2} className="group">Dư bán tốt nhất</th>}
         {head('volume', 'Tổng KL')}<th rowSpan={2} className="number">Cao</th><th rowSpan={2} className="number">Thấp</th>
         {!compact && head('foreign', 'NN ròng')}
-        <th rowSpan={2}>Giá đã lưu</th></tr>
-      <tr>{!compact && <><th className="number">Giá</th><th className="number">KL</th></>}{head('price', 'Giá', 'number', 1)}<th className="number">+/-</th>{head('change', '%', 'number', 1)}{!compact && <><th className="number">Giá</th><th className="number">KL</th></>}</tr>
+        <th rowSpan={2}>Giá đã lưu (VND)</th></tr>
+      <tr>{!compact && <><th className="number">Giá</th><th className="number">KL</th></>}{head('price', 'Giá (nghìn VND)', 'number', 1)}<th className="number">+/-</th>{head('change', '%', 'number', 1)}{!compact && <><th className="number">Giá</th><th className="number">KL</th></>}</tr>
     </thead>
     <tbody>{shown.map(row => {
       const q = quotes?.[row.symbol];

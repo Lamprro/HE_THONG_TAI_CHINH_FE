@@ -6,7 +6,18 @@ import './styles.css';
 
 const client = new QueryClient({
   defaultOptions: {
-    queries: { staleTime: 300_000, gcTime: 1_800_000, retry: false, refetchOnWindowFocus: false },
+    queries: {
+      staleTime: 300_000,
+      gcTime: 1_800_000,
+      retry: (failureCount, error) => {
+        if (failureCount >= 2) return false;
+        const err = error as { kind?: string; status?: number } | null;
+        if (err?.kind === 'NETWORK' || err?.kind === 'TIMEOUT') return true;
+        if (err?.status && err.status >= 500) return true;
+        return false;
+      },
+      refetchOnWindowFocus: false,
+    },
   },
 });
 

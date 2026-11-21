@@ -77,9 +77,10 @@ export function errorMessage(error: unknown): string {
   return e.message || 'Đã có lỗi khi tải dữ liệu.';
 }
 
-export function QueryState({ loading, error, empty, retry, children }: { loading: boolean; error: unknown; empty?: boolean; retry: () => unknown; children: ReactNode }) {
+export function QueryState({ loading, error, empty, retry, disabledMessage, children }: { loading: boolean; error: unknown; empty?: boolean; retry?: () => unknown; disabledMessage?: string; children: ReactNode }) {
+  if (disabledMessage) return <div className="state info" role="status"><span>{disabledMessage}</span></div>;
   if (loading) return <div className="state" role="status"><span className="spinner" />Đang tải dữ liệu…</div>;
-  if (error) return <div className="state error" role="alert"><AlertCircle size={24} /><strong>Chưa tải được dữ liệu</strong><span>{errorMessage(error)}</span><button onClick={() => retry()}><RefreshCw size={14} />Thử lại</button></div>;
+  if (error) return <div className="state error" role="alert"><AlertCircle size={24} /><strong>Chưa tải được dữ liệu</strong><span>{errorMessage(error)}</span>{retry && <button onClick={() => retry()}><RefreshCw size={14} />Thử lại</button>}</div>;
   if (empty) return <div className="state"><strong>Chưa có dữ liệu trong phạm vi đã chọn</strong><span>Thử đổi mã, sàn hoặc kỳ tra cứu.</span></div>;
   return <>{children}</>;
 }

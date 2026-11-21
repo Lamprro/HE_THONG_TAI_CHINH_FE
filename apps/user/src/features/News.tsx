@@ -4,6 +4,7 @@ import { ArrowUpRight, Bot, Newspaper, Search } from 'lucide-react';
 import { apiData, apiPage, type Article, type Row } from '../shared/api';
 import { date, fixed, safeUrl, signed, text } from '../shared/format';
 import { useLiveQuotes } from '../shared/live';
+import { StructuredView } from '../shared/StructuredView';
 import { Note, Pagination, QueryState, securityLink } from '../shared/ui';
 
 type ArticleDetail = Article & { author?: string | null; crawledAt?: string | null; contentTruncated?: boolean; companies?: { companyId: string; companyName: string; symbol: string; exchange: string; matchMethod: string; associationType: string }[]; companyLinksTruncated?: boolean };
@@ -31,7 +32,7 @@ export function NewsPage({ symbol, exchange }: { symbol?: string; exchange?: str
 function NewsAnalysis({ id }: { id: string }) {
   const query = useQuery({ queryKey: ['news-analysis', id], staleTime: 900_000, queryFn: ({ signal }) => apiData<Row[]>('newsAnalysis', [id], {}, signal) });
   return <section className="panel"><div className="panel-heading"><div><h2><Bot size={16} />Phân tích AI của bài</h2><span className="muted">Chỉ kết quả đã qua kiểm định và còn khớp nội dung nguồn</span></div></div>
-    <QueryState loading={query.isPending} error={query.error} retry={query.refetch}>{query.data?.data.length ? <div className="analysis-list">{query.data.data.map((row, i) => <article key={text(row.id, String(i))}><dl className="stats">{Object.entries(row).filter(([, v]) => v !== null && typeof v !== 'object').map(([k, v]) => <div key={k}><dt>{k}</dt><dd>{text(typeof v === 'boolean' ? String(v) : v)}</dd></div>)}</dl>{Object.entries(row).filter(([, v]) => v !== null && typeof v === 'object').map(([k, v]) => <details key={k}><summary>{k}</summary><pre>{JSON.stringify(v, null, 2).slice(0, 4000)}</pre></details>)}</article>)}</div> : <div className="state"><strong>Chưa có phân tích được công bố cho bài này</strong><span>Trang không tự gọi mô hình để tạo phân tích.</span></div>}</QueryState>
+    <QueryState loading={query.isPending} error={query.error} retry={query.refetch}>{query.data?.data.length ? <div className="analysis-list">{query.data.data.map((row, i) => <article key={text(row.id, String(i))} className="analysis-card"><StructuredView data={row} /></article>)}</div> : <div className="state"><strong>Chưa có phân tích được công bố cho bài này</strong><span>Trang không tự gọi mô hình để tạo phân tích.</span></div>}</QueryState>
   </section>;
 }
 

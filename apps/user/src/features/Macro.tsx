@@ -2,7 +2,7 @@ import { useState } from 'react';
 import { useQuery } from '@tanstack/react-query';
 import { apiPage } from '../shared/api';
 import { Sparkline } from '../shared/charts';
-import { date, trimmed } from '../shared/format';
+import { date, tradingToday, trimmed } from '../shared/format';
 import { Note, QueryState } from '../shared/ui';
 
 type Series = { id: string; code: string; name: string; frequency: string; unit: string; countryCode?: string; sourceCode?: string; description?: string | null };
@@ -17,8 +17,10 @@ const viNames: Record<string, string> = {
 };
 
 function useObservations(id: string, years: number) {
-  const to = new Date().toISOString().slice(0, 10);
-  const from = new Date(Date.now() - years * 365.25 * 86400000).toISOString().slice(0, 10);
+  const to = tradingToday();
+  const fromDate = new Date(to + 'T00:00:00Z');
+  fromDate.setUTCFullYear(fromDate.getUTCFullYear() - years);
+  const from = fromDate.toISOString().slice(0, 10);
   return useQuery({ queryKey: ['macro-obs', id, years], staleTime: 3_600_000, queryFn: ({ signal }) => apiPage<Observation>('macroObservations', [id], { from, to, size: 500 }, signal) });
 }
 
@@ -36,8 +38,16 @@ function MacroCard({ series, selected, onSelect }: { series: Series; selected: b
   const delta = last && prev ? Number(last.value) - Number(prev.value) : null;
   return <button className={'macro-card ' + (selected ? 'selected' : '')} onClick={onSelect} aria-pressed={selected}>
     <span className="macro-name">{viNames[series.code] || series.name}</span>
-    <strong>{short(last?.value ?? null, series.unit)}</strong>
-    <small className={delta === null ? '' : delta > 0 ? 'positive' : delta < 0 ? 'negative' : ''}>{delta === null ? '—' : (delta > 0 ? '▲ ' : delta < 0 ? '▼ ' : '') + short(String(Math.abs(delta)), series.unit)} · {date(last?.date)}</small>
+    <strong>{obs.isPending ? '…' : obs.error ? '—' : short(last?.value ?? null, series.unit)}</strong>
+    {obs.error ? (
+      <small className="negative">Chưa tải được số liệu</small>
+    ) : obs.isPending ? (
+      <small className="muted">Đang tải…</small>
+    ) : (
+      <small className={delta === null ? '' : delta > 0 ? 'positive' : delta < 0 ? 'negative' : ''}>
+        {delta === null ? '—' : (delta > 0 ? '▲ ' : delta < 0 ? '▼ ' : '') + short(String(Math.abs(delta)), series.unit)} · {date(last?.date)}
+      </small>
+    )}
     <Sparkline values={values.map(o => Number(o.value))} width={200} height={34} label={series.name} />
     <small>{frequencyNames[series.frequency] || series.frequency} · {series.unit}</small>
   </button>;

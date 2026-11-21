@@ -3,6 +3,7 @@ import { useQuery } from '@tanstack/react-query';
 import { Bot, ShieldAlert } from 'lucide-react';
 import { apiData, apiPage, type Row } from '../shared/api';
 import { compactVolume, date, decimal, text, tradingToday } from '../shared/format';
+import { StructuredView } from '../shared/StructuredView';
 import { Note, Pagination, QueryState } from '../shared/ui';
 
 type Foreign = { id: string; tradingDate: string; buyVolume: string | null; sellVolume: string | null; volumeUnit: string; sourceCode: string };
@@ -39,9 +40,7 @@ export function LocalAiTable({ models }: { models: LocalModel[] }) {
 }
 
 function ScenarioCard({ row }: { row: Row }) {
-  const entries = Object.entries(row).filter(([, v]) => v !== null && typeof v !== 'object');
-  const nested = Object.entries(row).filter(([, v]) => v !== null && typeof v === 'object');
-  return <article className="scenario"><dl className="stats">{entries.map(([k, v]) => <div key={k}><dt>{k}</dt><dd>{text(typeof v === 'boolean' ? String(v) : v)}</dd></div>)}</dl>{nested.map(([k, v]) => <details key={k}><summary>{k}</summary><pre>{JSON.stringify(v, null, 2).slice(0, 4000)}</pre></details>)}</article>;
+  return <article className="scenario"><StructuredView data={row} /></article>;
 }
 
 export function AiPanel({ symbol, exchange }: { symbol: string; exchange: string }) {

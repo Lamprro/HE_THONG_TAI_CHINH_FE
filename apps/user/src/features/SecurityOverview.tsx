@@ -60,9 +60,17 @@ function QuarterlyBars({ symbol, exchange }: { symbol: string; exchange: string 
   </section>;
 }
 
-export function KeyMetrics({ symbol, exchange }: { symbol: string; exchange: string }) {
-  const query = useQuery({ queryKey: ['compare-self', symbol, exchange], staleTime: 1_800_000, queryFn: ({ signal }) => apiData<Compare>('compare', [], { symbols: symbol, exchange, codes: keyMetricCodes.join(','), origin: 'PROVIDER' }, signal) });
-  const derived = useQuery({ queryKey: ['compare-self-derived', symbol, exchange], staleTime: 1_800_000, queryFn: ({ signal }) => apiData<Compare>('compare', [], { symbols: symbol, exchange, codes: keyMetricCodes.join(','), origin: 'DERIVED' }, signal) });
+export function KeyMetrics({ symbol, exchange, initialMetrics }: { symbol: string; exchange: string; initialMetrics?: Row[] }) {
+  const query = useQuery({ queryKey: ['compare-self', symbol, exchange], enabled: !initialMetrics || initialMetrics.length === 0, staleTime: 1_800_000, queryFn: ({ signal }) => apiData<Compare>('compare', [], { symbols: symbol, exchange, codes: keyMetricCodes.join(','), origin: 'PROVIDER' }, signal) });
+  const derived = useQuery({ queryKey: ['compare-self-derived', symbol, exchange], enabled: !initialMetrics || initialMetrics.length === 0, staleTime: 1_800_000, queryFn: ({ signal }) => apiData<Compare>('compare', [], { symbols: symbol, exchange, codes: keyMetricCodes.join(','), origin: 'DERIVED' }, signal) });
+
+  if (initialMetrics && initialMetrics.length > 0) {
+    const available = keyMetricCodes.map(code => initialMetrics.find(m => (m.code === code || m.metricCode === code) && (m.value !== null || m.valueText !== null))).filter(Boolean) as Row[];
+    return <section className="panel"><div className="panel-heading"><div><h2>Chỉ số chính</h2><span className="muted">Giá trị mới nhất trích xuất từ tổng quan doanh nghiệp</span></div></div>
+      <div className="metric-tiles">{available.map(m => <div key={text(m.code || m.metricCode) + text(m.derived)} className="metric-tile"><span>{text(m.name || m.code || m.metricCode)}</span><strong>{m.value === null ? text(m.valueText) : decimal(Number(m.value).toFixed(2))}<small>{text(m.unit)}</small></strong><small>{date(m.asOfDate)} · {m.derived ? 'Java tính' : text(m.sourceCode)}</small></div>)}</div>
+    </section>;
+  }
+
   const metrics = [...(query.data?.data.securities[0]?.metrics || []), ...(derived.data?.data.securities[0]?.metrics || [])];
   const defs = [...(query.data?.data.definitions || []), ...(derived.data?.data.definitions || [])];
   const rows = keyMetricCodes.map(code => metrics.find(m => m.metricCode === code && m.metricState === 'AVAILABLE')).filter(Boolean) as Compare['securities'][0]['metrics'];
@@ -78,7 +86,7 @@ export function OverviewPanel({ symbol, exchange, openTab }: { symbol: string; e
   return <QueryState loading={query.isPending} error={query.error} retry={query.refetch}>
     <div className="overview-grid">
       <div>
-        <KeyMetrics symbol={symbol} exchange={exchange} />
+        <KeyMetrics symbol={symbol} exchange={exchange} initialMetrics={data?.metrics?.items} />
         <QuarterlyBars symbol={symbol} exchange={exchange} />
         <section className="panel"><div className="panel-heading"><h2>Tin mới</h2><button onClick={() => openTab('news')}>Xem tất cả</button></div>
           {data?.news.items.length ? <ul className="plain-list">{data.news.items.map(item => <li key={item.id}><a href={'#/news/' + encodeURIComponent(item.id)}>{item.title}</a><small>{item.sourceName} · {date(item.publishedAt)}</small></li>)}</ul> : <div className="state"><strong>Chưa có tin liên kết</strong></div>}
