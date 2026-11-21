@@ -9,6 +9,19 @@ const IGNORED_KEYS = new Set([
   'schema_version', 'manifest_sha256', 'evidence_sha256',
 ]);
 
+function tryParseJson(val: unknown): unknown {
+  if (typeof val !== 'string') return val;
+  const trimmed = val.trim();
+  if ((trimmed.startsWith('{') && trimmed.endsWith('}')) || (trimmed.startsWith('[') && trimmed.endsWith(']'))) {
+    try {
+      return JSON.parse(trimmed);
+    } catch {
+      return val;
+    }
+  }
+  return val;
+}
+
 export function StructuredView({
   data,
   depth = 0,
@@ -19,16 +32,18 @@ export function StructuredView({
   maxDepth?: number;
 }): ReactNode {
   if (depth > maxDepth) {
-    return <code className="subtle" style={{ fontSize: '0.8rem' }}>{JSON.stringify(data).slice(0, 100)}…</code>;
+    return <span className="subtle" style={{ fontSize: '0.85rem' }}>{text(data)}</span>;
   }
 
   const primitives: [string, unknown][] = [];
   const complex: [string, unknown][] = [];
 
-  for (const [k, v] of Object.entries(data)) {
-    if (v === null || v === undefined) continue;
+  for (const [k, rawV] of Object.entries(data)) {
+    if (rawV === null || rawV === undefined) continue;
     if (IGNORED_KEYS.has(k)) continue;
-    if (typeof v === 'object') {
+
+    const v = tryParseJson(rawV);
+    if (typeof v === 'object' && v !== null) {
       complex.push([k, v]);
     } else {
       primitives.push([k, v]);
@@ -67,15 +82,18 @@ export function StructuredView({
           <strong style={{ display: 'block', fontSize: '0.85rem', color: 'var(--text-muted, #94a3b8)', marginBottom: '0.4rem' }}>{formatKey(k)}</strong>
           {Array.isArray(v) ? (
             <ul style={{ margin: 0, paddingLeft: '1.2rem', fontSize: '0.9rem' }}>
-              {v.map((item, idx) => (
-                <li key={idx} style={{ marginBottom: '0.25rem' }}>
-                  {typeof item === 'object' && item !== null ? (
-                    <StructuredView data={item as Record<string, unknown>} depth={depth + 1} maxDepth={maxDepth} />
-                  ) : (
-                    formatPrimitiveValue(item)
-                  )}
-                </li>
-              ))}
+              {v.map((item, idx) => {
+                const parsedItem = tryParseJson(item);
+                return (
+                  <li key={idx} style={{ marginBottom: '0.25rem' }}>
+                    {typeof parsedItem === 'object' && parsedItem !== null ? (
+                      <StructuredView data={parsedItem as Record<string, unknown>} depth={depth + 1} maxDepth={maxDepth} />
+                    ) : (
+                      formatPrimitiveValue(parsedItem)
+                    )}
+                  </li>
+                );
+              })}
             </ul>
           ) : typeof v === 'object' && v !== null ? (
             <StructuredView data={v as Record<string, unknown>} depth={depth + 1} maxDepth={maxDepth} />
