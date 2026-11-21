@@ -74,63 +74,6 @@ export function KeyMetrics({ symbol, exchange }: { symbol: string; exchange: str
   </section>;
 }
 
-export function LocalAiRankCard({ symbol }: { symbol: string }) {
-  const query = useQuery({
-    queryKey: ['security-local-ai-rank', symbol],
-    staleTime: 300_000,
-    queryFn: async ({ signal }) => {
-      try {
-        const res = await fetch(`/api/v1/securities/${encodeURIComponent(symbol)}/local-ai/rank`, { signal });
-        if (!res.ok) return null;
-        return (await res.json()) as {
-          target_period: string;
-          cutoff: string;
-          model: string;
-          research_only: boolean;
-          disclaimer: string;
-          results: Array<{
-            ticker: string;
-            score: number;
-            rank_percentile: number;
-            bucket: 'TOP' | 'MIDDLE' | 'BOTTOM';
-            probability_status: string;
-          }>;
-        };
-      } catch {
-        return null;
-      }
-    },
-  });
-
-  const data = query.data;
-  const item = data?.results?.find(r => r.ticker.toUpperCase() === symbol.toUpperCase());
-  if (!item) return null;
-
-  const ok = item.bucket === 'TOP';
-  return (
-    <section className="panel">
-      <div className="panel-heading">
-        <div>
-          <h2>Xếp hạng tham khảo quý tới (Local AI)</h2>
-          <span className="muted">Kỳ {data?.target_period} · Mô hình nghiên cứu {data?.model}</span>
-        </div>
-        <span className={'status-chip ' + (ok ? 'ok' : item.bucket === 'MIDDLE' ? 'warn' : '')}>
-          Nhóm {item.bucket} (Top {(item.rank_percentile * 100).toFixed(0)}%)
-        </span>
-      </div>
-      <div className="coverage-grid">
-        <div><span>Điểm xếp hạng</span><strong>{item.score.toFixed(2)}</strong><small>Thang 0..1</small></div>
-        <div><span>Phân vị (Percentile)</span><strong>{(item.rank_percentile * 100).toFixed(0)}%</strong><small>So với rổ 100 mã</small></div>
-        <div><span>Kỳ mục tiêu</span><strong>{data?.target_period}</strong><small>Chốt dữ liệu: {date(data?.cutoff)}</small></div>
-        <div><span>Nhãn nghiên cứu</span><strong>RESEARCH_ONLY</strong><small>{item.probability_status}</small></div>
-      </div>
-      <Note>
-        {data?.disclaimer || 'Mô hình nghiên cứu tham khảo (RESEARCH_ONLY), chưa kiểm chứng trong tương lai, không phải khuyến nghị đầu tư.'}
-      </Note>
-    </section>
-  );
-}
-
 export function OverviewPanel({ symbol, exchange, openTab }: { symbol: string; exchange: string; openTab: (tab: 'financials' | 'news' | 'ai') => void }) {
   const query = useQuery({ queryKey: ['overview', symbol, exchange], staleTime: 900_000, queryFn: ({ signal }) => apiData<Overview>('overview', [symbol], { exchange }, signal) });
   const data = query.data?.data;
@@ -140,7 +83,6 @@ export function OverviewPanel({ symbol, exchange, openTab }: { symbol: string; e
       <div>
         <KeyMetrics symbol={symbol} exchange={exchange} initialMetrics={data?.metrics?.items} />
         <QuarterlyBars symbol={symbol} exchange={exchange} />
-        <LocalAiRankCard symbol={symbol} />
         <section className="panel"><div className="panel-heading"><h2>Tin mới</h2><button onClick={() => openTab('news')}>Xem tất cả</button></div>
           {data?.news.items.length ? <ul className="plain-list">{data.news.items.map(item => <li key={item.id}><a href={'#/news/' + encodeURIComponent(item.id)}>{item.title}</a><small>{item.sourceName} · {date(item.publishedAt)}</small></li>)}</ul> : <div className="state"><strong>Chưa có tin liên kết</strong></div>}
         </section>

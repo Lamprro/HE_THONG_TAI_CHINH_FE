@@ -11,45 +11,14 @@ type Availability = {
 };
 type CatalogModel = { packageId: string; modelId: string; horizonQuarters: number; targetPeriod: string; selectedAlgorithm: string; developmentGatePassed: boolean; registeredInputs: string; storedSelectedResearchResults: string; firstInputAsOf: string | null; lastInputAsOf: string | null; readiness: string; outputContract?: { type?: string; unit?: string; note?: string } };
 
-type RankResponse = {
-  target_period: string;
-  cutoff: string;
-  model: string;
-  protocol_version: string;
-  research_only: boolean;
-  disclaimer: string;
-  count: number;
-  results: Array<{
-    ticker: string;
-    score: number;
-    rank_percentile: number;
-    bucket: 'TOP' | 'MIDDLE' | 'BOTTOM';
-    probability_status: string;
-  }>;
-};
-
 const families: Record<string, string> = { direction: 'Hướng giá', drawdown: 'Sụt giảm tối đa', ensemble: 'Tổ hợp hướng', npat: 'Lợi nhuận sau thuế', quantile: 'Phân vị lợi suất', return: 'Lợi suất điều chỉnh', volatility: 'Biến động' };
 
 export function AiCenterPage() {
   const availability = useQuery({ queryKey: ['analysis-availability'], staleTime: 900_000, queryFn: ({ signal }) => apiData<Availability>('analysisAvailability', [], {}, signal) });
   const catalog = useQuery({ queryKey: ['local-ai-models'], staleTime: 900_000, queryFn: ({ signal }) => apiPage<CatalogModel>('localAiModels', [], { size: 100 }, signal) });
   const [symbol, setSymbol] = useState('');
-  const [selectedBucket, setSelectedBucket] = useState<'ALL' | 'TOP' | 'MIDDLE' | 'BOTTOM'>('ALL');
-
-  const rankQuery = useQuery({
-    queryKey: ['public-local-ai-rank', selectedBucket],
-    staleTime: 300_000,
-    queryFn: async ({ signal }) => {
-      const url = selectedBucket === 'ALL' ? '/api/v1/local-ai/rank' : `/api/v1/local-ai/rank?bucket=${selectedBucket}`;
-      const res = await fetch(url, { signal });
-      if (!res.ok) return null;
-      return (await res.json()) as RankResponse;
-    },
-  });
-
   const a = availability.data?.data;
   const suite = a?.localAi.registeredSuite?.data;
-  const ranks = rankQuery.data;
 
   return <>
     <div className="page-heading"><div><p className="eyebrow">PHÂN TÍCH BẰNG AI</p><h1>Trung tâm AI</h1><p>Tình trạng các luồng AI: phân tích tin (LLM), kịch bản tài chính (LLM) và bộ mô hình Local AI theo quý.</p></div></div>
@@ -60,69 +29,6 @@ export function AiCenterPage() {
         <article className="ai-status"><Bot size={18} /><h3>Local AI</h3><strong className="reference">{suite?.state || a?.localAi.publicPredictionReader}</strong><small>Gói {suite?.package ? suite.package.id.slice(0, 8) + '… đăng ký ' + date(suite.package.registeredAt) : 'chưa có'} · đọc dự đoán công khai: {a?.localAi.publicPredictionReader} ({a?.localAi.reason})</small></article>
       </div>
     </QueryState>
-
-    {/* Local AI Public Reference Ranking */}
-    {ranks && ranks.results && ranks.results.length > 0 && (
-      <section className="panel">
-        <div className="panel-heading">
-          <div>
-            <h2>Xếp hạng tham khảo quý tới (Local AI Rank-100)</h2>
-            <span className="muted">Kỳ mục tiêu: {ranks.target_period} · Chốt dữ liệu: {date(ranks.cutoff)} · Mô hình: {ranks.model}</span>
-          </div>
-          <div className="toolbar" style={{ margin: 0 }}>
-            {(['ALL', 'TOP', 'MIDDLE', 'BOTTOM'] as const).map(b => (
-              <button
-                key={b}
-                type="button"
-                className={selectedBucket === b ? 'active' : ''}
-                style={{ padding: '0.25rem 0.6rem', fontSize: '0.8rem' }}
-                onClick={() => setSelectedBucket(b)}
-              >
-                {b === 'ALL' ? 'Tất cả' : b}
-              </button>
-            ))}
-          </div>
-        </div>
-        <div className="table-scroll">
-          <table>
-            <thead>
-              <tr>
-                <th>Mã CP</th>
-                <th>Nhóm</th>
-                <th className="number">Điểm số</th>
-                <th className="number">Phân vị</th>
-                <th>Trạng thái nhãn</th>
-                <th>Hành động</th>
-              </tr>
-            </thead>
-            <tbody>
-              {ranks.results.map(r => (
-                <tr key={r.ticker}>
-                  <td><strong>{r.ticker}</strong></td>
-                  <td>
-                    <span className={'status-chip ' + (r.bucket === 'TOP' ? 'ok' : r.bucket === 'MIDDLE' ? 'warn' : '')}>
-                      {r.bucket}
-                    </span>
-                  </td>
-                  <td className="number">{r.score.toFixed(2)}</td>
-                  <td className="number">{(r.rank_percentile * 100).toFixed(0)}%</td>
-                  <td><small>{r.probability_status}</small></td>
-                  <td>
-                    <a href={`#/securities?search=${encodeURIComponent(r.ticker)}`} style={{ fontSize: '0.8rem' }}>
-                      Xem tổng quan mã
-                    </a>
-                  </td>
-                </tr>
-              ))}
-            </tbody>
-          </table>
-        </div>
-        <div className="ai-guard">
-          <ShieldAlert size={16} />
-          <p>{ranks.disclaimer}</p>
-        </div>
-      </section>
-    )}
 
     <section className="panel"><div className="panel-heading"><div><h2>Bộ mô hình Local AI</h2><span className="muted">{catalog.data ? `${catalog.data.total} mô hình trong gói nghiên cứu mới nhất` : 'Danh mục mô hình'}</span></div>
       <form className="toolbar" onSubmit={event => { event.preventDefault(); if (/^[A-Za-z0-9]{1,20}$/.test(symbol.trim())) window.location.hash = '/securities?search=' + encodeURIComponent(symbol.trim().toUpperCase()); }}><input aria-label="Xem Local AI theo mã" value={symbol} onChange={e => setSymbol(e.target.value)} placeholder="Mã, vd FPT" /><button type="submit">Tìm mã</button></form></div>
