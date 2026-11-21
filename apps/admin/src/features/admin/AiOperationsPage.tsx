@@ -7,12 +7,11 @@ import { ApiResult, Records, type Row } from './Records';
 import { CommandTracker, submitCommand, useCommand } from './CommandTracker';
 import type { Security } from '../data-scope/contracts';
 import { PromptManager } from './PromptManager';
-import { LocalAiOperationsPanel } from './LocalAiOperationsPanel';
 
 const targets = ['NET_PROFIT_AFTER_TAX', 'PRETAX_PROFIT', 'TOTAL_ASSETS', 'OWNERS_EQUITY', 'LIABILITIES', 'STOCK_PRICE'];
 export function AiOperationsPage({ onRun }: { onRun: (id: string) => void }) {
   const [tab, setTab] = useState('forecast');
-  return <div className="admin-stack"><div className="toolbar">{[['forecast', 'Dự báo'], ['news', 'Phân tích tin'], ['recovery', 'Khôi phục & duyệt'], ['local-ai', 'Local AI & 100 mã'], ['prompts', 'Prompt & cấu hình']].map(([id, title]) => <button className={tab === id ? 'primary-button' : 'light-button'} key={id} onClick={() => setTab(id)}>{title}</button>)}</div>{tab === 'prompts' ? <PromptManager/> : tab === 'local-ai' ? <LocalAiOperationsPanel/> : <AiWorkspace key={tab} tab={tab} onRun={onRun}/>}</div>;
+  return <div className="admin-stack"><div className="toolbar">{[['forecast', 'Dự báo'], ['news', 'Phân tích tin'], ['recovery', 'Khôi phục & duyệt'], ['prompts', 'Prompt & cấu hình']].map(([id, title]) => <button className={tab === id ? 'primary-button' : 'light-button'} key={id} onClick={() => setTab(id)}>{title}</button>)}</div>{tab === 'prompts' ? <PromptManager/> : <AiWorkspace key={tab} tab={tab} onRun={onRun}/>}</div>;
 }
 function AiWorkspace({ tab, onRun }: { tab: string; onRun: (id: string) => void }) {
   const [security, setSecurity] = useState(''); const [asOf, setAsOf] = useState(''); const [horizon, setHorizon] = useState(4); const [selected, setSelected] = useState(['STOCK_PRICE']); const [requireMacro, setMacro] = useState(false);

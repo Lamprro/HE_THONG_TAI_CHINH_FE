@@ -1,42 +1,69 @@
 import { useState, type ReactNode } from 'react';
 import { useQueryClient } from '@tanstack/react-query';
-import { API_BASE, ApiError, getJson, setApiBase } from './client';
+import { API_BASE, ApiError, getJson, postJson, setApiBase } from './client';
 import { installAuthIntegration } from './access';
+import type { AdminLogin, AdminSession } from './admin-contract';
 
 export function SessionGate({ children }: { children: ReactNode }) {
-  const [connected, setConnected] = useState(false);
-  const [base, setBase] = useState(API_BASE);
-  const [token, setToken] = useState('');
+  const [session, setSession] = useState<AdminSession>();
+  const [username, setUsername] = useState('');
+  const [password, setPassword] = useState('');
   const [error, setError] = useState('');
   const [busy, setBusy] = useState(false);
   const client = useQueryClient();
+
   const disconnect = (notice = '') => {
-    installAuthIntegration(); setToken(''); setConnected(false); setError(notice); client.clear();
+    installAuthIntegration();
+    setPassword('');
+    setSession(undefined);
+    setError(notice);
+    client.clear();
   };
+
   const connect = async () => {
-    setBusy(true); setError('');
+    setBusy(true);
+    setError('');
     try {
-      setApiBase(base);
-      if (token.trim().length < 32) throw new Error('Token admin phải có ít nhất 32 ký tự.');
-      const credential = token.trim();
-      installAuthIntegration({ authorize: () => true, headers: () => ({ Authorization: `Bearer ${credential}` }),
-        inactiveJobsAccessible: () => true, onUnauthorized: () => disconnect('Phiên quản trị đã hết hạn hoặc token bị thu hồi. Nhập lại token để tiếp tục.') });
-      const session = await getJson<{ authenticated: boolean }>(API_BASE, '/api/admin/console/session');
-      if (session.authenticated !== true) throw new Error('Backend chưa xác nhận quyền admin.');
-      client.clear(); setToken(''); setConnected(true);
+      setApiBase(API_BASE);
+      const { accessToken } = await postJson<AdminLogin>(API_BASE, '/api/auth/login', {
+        username: username.trim(), password,
+      });
+      if (!accessToken) throw new Error('Backend chưa cấp phiên đăng nhập.');
+      installAuthIntegration({
+        authorize: () => true,
+        headers: () => ({ Authorization: `Bearer ${accessToken}` }),
+        inactiveJobsAccessible: () => true,
+        onUnauthorized: () => disconnect('Phiên quản trị đã hết hạn. Hãy đăng nhập lại.'),
+      });
+      const current = await getJson<AdminSession>(API_BASE, '/api/admin/console/session');
+      if (!current.authenticated || !current.authorities?.includes('ROLE_ADMIN')) {
+        throw new Error('Tài khoản không có quyền quản trị.');
+      }
+      client.clear();
+      setSession(current);
     } catch (cause) {
       installAuthIntegration();
-      setError(cause instanceof ApiError && (cause.status === 401 || cause.status === 403) ? 'Token admin không đúng hoặc không có quyền quản trị.'
-        : cause instanceof Error ? cause.message : 'Không thể kết nối.');
-    } finally { setBusy(false); }
+      setError(cause instanceof ApiError && cause.status === 401 ? 'Tên đăng nhập hoặc mật khẩu không đúng.'
+        : cause instanceof ApiError && cause.status === 403 ? 'Tài khoản không có quyền quản trị.'
+        : cause instanceof Error ? cause.message : 'Không thể đăng nhập.');
+    } finally {
+      setPassword('');
+      setBusy(false);
+    }
   };
-  if (connected) return <><div className="session-bar"><span>Admin · {API_BASE} · token chỉ giữ trong phiên này</span><button className="text-button" onClick={() => disconnect()}>Ngắt kết nối</button></div>{children}</>;
-  return <main className="connect-page"><form className="panel connect-card" onSubmit={e => { e.preventDefault(); if (!busy) void connect(); }}>
-    <h1>Kết nối quản trị</h1><p>Đăng nhập bằng token admin riêng của backend. Tác vụ và lịch sử được xử lý tại Java, nguồn dữ liệu đi qua Python.</p>
-    <label>Địa chỉ backend<input type="url" required value={base} onChange={e => setBase(e.target.value)} autoComplete="url"/></label>
-    <label>Token admin<input type="password" required minLength={32} value={token} onChange={e => setToken(e.target.value)} autoComplete="off" spellCheck={false}/></label>
-    <p className="subtle">Token không được lưu vào localStorage, mã nguồn hay cấu hình Vite. Tải lại trang cần kết nối lại.</p>
-    {error && <p className="state-error" role="alert">{error}</p>}
-    <button className="primary-button" disabled={busy}>{busy ? 'Đang xác thực…' : 'Kết nối'}</button>
-  </form></main>;
+
+  if (session) return <><div className="session-bar"><span>Admin · {session.email ?? session.principal}</span>
+    <button className="text-button" onClick={() => disconnect()}>Đăng xuất</button></div>{children}</>;
+
+  return <main className="connect-page">
+    <form className="panel connect-card" onSubmit={event => { event.preventDefault(); if (!busy) void connect(); }}>
+      <h1>Đăng nhập quản trị</h1>
+      <label>Tên đăng nhập<input required maxLength={100} value={username}
+        onChange={event => setUsername(event.target.value)} autoComplete="username"/></label>
+      <label>Mật khẩu<input type="password" required maxLength={72} value={password}
+        onChange={event => setPassword(event.target.value)} autoComplete="current-password"/></label>
+      {error && <p className="state-error" role="alert">{error}</p>}
+      <button className="primary-button" disabled={busy}>{busy ? 'Đang đăng nhập…' : 'Đăng nhập'}</button>
+    </form>
+  </main>;
 }

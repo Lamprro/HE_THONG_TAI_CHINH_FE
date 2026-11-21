@@ -14,7 +14,7 @@ export type DataStatus = {
 };
 type Overview = {
   profile: Data<Security>; dataStatus: Data<DataStatus>; statements: Page<Statement>; metrics: Page<Row>; news: Page<Article>;
-  financialScenarios: Data<Row[]>; financialScenarioState: string; localAi: Data<Row & { state?: string; models?: Row[] }>;
+  financialScenarios: Data<Row[]>; financialScenarioState: string;
 };
 type Compare = { asOf: string; definitions: { code: string; name: string; unit: string }[]; securities: (Security & { metrics: (Row & { metricCode: string; value: string | null; unit: string; asOfDate: string | null; metricState: string })[] })[] };
 type Matrix = { periods: { id: string; fiscalYear: number; periodType: string }[]; series: { code: string; name: string; unit: string; scope: string; values: Record<string, { value: string | null }> }[] };
@@ -91,7 +91,7 @@ export function OverviewPanel({ symbol, exchange, openTab }: { symbol: string; e
         <section className="panel"><div className="panel-heading"><h2>Thông tin niêm yết</h2></div><dl className="stats">{[['Sàn', security?.exchange], ['Loại', security?.securityType], ['Ngày niêm yết', date(security?.listedDate)], ['Mệnh giá', decimal(security?.parValue)], ['Cổ phiếu lưu hành', decimal(security?.sharesOutstanding)], ['Ngành', security?.industryName], ['Lĩnh vực', security?.sectorName]].map(([k, v]) => <div key={String(k)}><dt>{String(k)}</dt><dd>{text(v)}</dd></div>)}</dl></section>
         <DataStatusCard status={data?.dataStatus.data} />
         <section className="panel"><div className="panel-heading"><h2>Báo cáo gần nhất</h2><button onClick={() => openTab('financials')}>Chi tiết</button></div><ul className="plain-list">{data?.statements.items.map(item => <li key={item.id}><span>{item.periodType}/{item.fiscalYear} · {item.statementType}</span><small>{item.sourceCode} · công bố {date(item.publishedAt)}</small></li>)}</ul></section>
-        <section className="panel"><div className="panel-heading"><h2>AI</h2><button onClick={() => openTab('ai')}>Xem</button></div><dl className="stats"><div><dt>Kịch bản tài chính</dt><dd>{data?.financialScenarioState === 'NO_ELIGIBLE_RESULT' ? 'Chưa có kết quả đủ điều kiện' : text(data?.financialScenarioState)}</dd></div><div><dt>Local AI</dt><dd>{text(data?.localAi.data.state)}</dd></div></dl></section>
+        <section className="panel"><div className="panel-heading"><h2>AI</h2><button onClick={() => openTab('ai')}>Xem</button></div><dl className="stats"><div><dt>Kịch bản tài chính</dt><dd>{data?.financialScenarioState === 'NO_ELIGIBLE_RESULT' ? 'Chưa có kết quả đủ điều kiện' : text(data?.financialScenarioState)}</dd></div></dl></section>
       </div>
     </div>
   </QueryState>;

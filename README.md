@@ -33,9 +33,13 @@ pnpm typecheck
 pnpm build
 ```
 
-Use separate origins for the two applications. The backend CORS allowlist must include the origins actually used. Admin credentials remain managed by the existing admin UI; do not place private secrets in Vite variables.
+Use separate origins for the two applications. The backend CORS allowlist must include the origins actually used. Admin signs in with an account provisioned in the backend database. Keep passwords and the JWT signing key out of Vite variables.
 
 Production outputs are `apps/user/dist` and `apps/admin/dist`. Set the hosting root to the appropriate app folder; hosting previously configured at the repository root must be updated. This migration does not deploy either application.
+
+## Admin integration
+
+Use the matching Java backend from `clean-admin-architecture`. The dashboard reads the authenticated principal and authorities from `/api/admin/console/session`. Admin system controls include the typed runtime status, catalog maintenance and a link to the backend Swagger UI. Review and confirm catalog changes in the dashboard.
 
 ## Verification and history
 
@@ -49,7 +53,7 @@ Migration checks on 2026-11-20: both production builds passed, admin unit tests 
 - Admin: https://he-thong-tai-chinh-admin.vercel.app
 - Backend origin: https://hardened-taekwondo-likewise.ngrok-free.dev
 
-Both Vercel projects belong to CEMENT_CODERS and track this repository's main branch, with roots apps/user and apps/admin respectively. VITE_API_BASE_URL is configured on Vercel for Production and Preview. Local development configuration remains separate. Admin users enter their backend token in the login screen; no admin token is stored in Vercel build variables.
+Both Vercel projects belong to CEMENT_CODERS and track this repository's main branch, with roots apps/user and apps/admin respectively. VITE_API_BASE_URL is configured on Vercel for Production and Preview. Local development configuration remains separate. Admin users sign in with a username and password. The backend issues a short-lived JWT that the dashboard holds in memory.
 
 Verification: backend build 4ea75d1 returned health/live and database UP; the read-only user smoke suite passed 38 routes / 60 requests with no model calls or business writes. CORS preflights passed for both production origins, including admin authorization/content-type headers. The deployed user site's market table and FPT financial detail displayed real backend records. Admin login rendered with the correct remote backend URL; an authenticated admin browser session was not exercised in this deployment check.
 
