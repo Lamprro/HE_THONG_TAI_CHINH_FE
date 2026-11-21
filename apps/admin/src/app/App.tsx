@@ -23,6 +23,8 @@ import { MarketDataAdminPage } from '../features/admin/MarketDataAdminPage';
 import { WorkflowPage, type WorkflowSelection } from '../features/admin/WorkflowPage';
 import { AiOperationsPage } from '../features/admin/AiOperationsPage';
 import { OperationsHistory } from '../features/admin/OperationsHistory';
+import { ActiveCommandsBanner } from '../features/admin/ActiveCommandsBanner';
+import { CommandTracker } from '../features/admin/CommandTracker';
 import { SchedulePanel } from '../features/admin/SchedulePanel';
 import { SystemSummary } from '../features/admin/SystemSummary';
 
@@ -65,6 +67,7 @@ function Dashboard() {
   const [qualityView, setQualityView] = useState<'validation' | 'versions'>('validation');
   const [qualityRaw, setQualityRaw] = useState<string | null>(null);
   const [qualityRun, setQualityRun] = useState<string | null>(null);
+  const [trackedCommand, setTrackedCommand] = useState<string | null>(null);
   const queryClient = useQueryClient();
   const view: DashboardSection = section === 'overview' || section === 'jobs' || section === 'quality' ? section
     : section === 'history' && historyKind === 'runs' ? 'runs' : 'other';
@@ -109,6 +112,7 @@ function Dashboard() {
         </div>
       </header>
       <div className="connection-strip"><div><span className={`signal ${connection === 'Đã kết nối' ? 'online' : connection === 'Đang kiểm tra' ? '' : 'offline'}`}/><b>Java Backend</b><span>{connection}</span></div></div>
+      <ActiveCommandsBanner onSelectCommand={setTrackedCommand}/>
 
       {section === 'overview' && <>
         <SystemSummary/>
@@ -172,5 +176,6 @@ function Dashboard() {
     <ValidationDrawer onRaw={id => { setIssue(null); setRawId(id); }} issue={issue} onClose={() => setIssue(null)} onRun={setRunId} onWorkflow={openWorkflow}/>
     <RawPayloadDrawer id={rawId} onClose={() => setRawId(null)} onRun={id => { setRawId(null); setRunId(id); }} onIssue={value => { setRawId(null); setIssue(value); }} onOperation={value => { setRawId(null); setOperation(value); }} onQuality={(payloadId, ingestionRunId) => { setRawId(null); openQuality(ingestionRunId, payloadId, 'validation'); }} onVersions={id => { setRawId(null); openQuality(id, null, 'versions'); }}/>
     {operation && <OperationDrawer operation={operation} sources={sources.data} onClose={() => setOperation(null)} onRun={setRunId}/>}
+    {trackedCommand && <CommandTracker id={trackedCommand} onRun={setRunId} onCommand={setTrackedCommand}/>}
   </AdminLayout>;
 }
