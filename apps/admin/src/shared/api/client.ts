@@ -43,6 +43,10 @@ export async function requestJson<T>(base: string, path: string, method = 'GET',
   } finally { window.clearTimeout(timer); }
 }
 export const getJson = <T>(base: string, path: string) => requestJson<T>(base, path);
+export const postJson = <T>(base: string, path: string, payload?: unknown) => requestJson<T>(base, path, 'POST', payload);
+export const putJson = <T>(base: string, path: string, payload?: unknown) => requestJson<T>(base, path, 'PUT', payload);
+export const patchJson = <T>(base: string, path: string, payload?: unknown) => requestJson<T>(base, path, 'PATCH', payload);
+export const deleteJson = <T>(base: string, path: string) => requestJson<T>(base, path, 'DELETE');
 
 export async function getHealth<T>(base: string, path: string): Promise<{ data: T; latencyMs: number; checkedAt: string }> {
   const start = performance.now();

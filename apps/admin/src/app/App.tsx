@@ -18,6 +18,8 @@ import { SessionGate } from '../shared/api/SessionGate';
 import { DataBrowser } from '../features/admin/DataBrowser';
 import { NativeApiPage } from '../features/admin/NativeApiPage';
 import { RuntimePage } from '../features/admin/RuntimePage';
+import { FinancialQualityPage } from '../features/data-quality/components/FinancialQualityPage';
+import { MarketDataAdminPage } from '../features/admin/MarketDataAdminPage';
 import { WorkflowPage, type WorkflowSelection } from '../features/admin/WorkflowPage';
 import { AiOperationsPage } from '../features/admin/AiOperationsPage';
 import { OperationsHistory } from '../features/admin/OperationsHistory';
@@ -51,7 +53,8 @@ function Dashboard() {
   const [workflow, setWorkflow] = useState<WorkflowSelection>({});
   const [historyKind, setHistoryKind] = useState<HistoryKind>('commands');
   const [jobsTab, setJobsTab] = useState<'jobs' | 'sources'>('jobs');
-  const [systemTab, setSystemTab] = useState<'status' | 'api'>('status');
+  const [qualityTab, setQualityTab] = useState<'validation' | 'financial'>('validation');
+  const [systemTab, setSystemTab] = useState<'status' | 'market' | 'api'>('status');
   const [dark, setDark] = useState(false);
   const [runId, setRunId] = useState<string | null>(null);
   const [issue, setIssue] = useState<ValidationResult | null>(null);
@@ -143,19 +146,26 @@ function Dashboard() {
       {section === 'scope' && <DataScopePage companies={scopeQueries.companies} securities={scopeQueries.securities}/>}
 
       {section === 'quality' && <>
-        <div className="management-toolbar">
-          <div className="header-actions"><button className="light-button" onClick={() => setOperation({ kind: 'validate-pending' })}>Validate dữ liệu chờ</button></div>
-          <span className="subtle">{writeNote}</span>
-        </div>
-        <DataQualityPage key={`${qualityRun}-${qualityRaw}-${qualityView}`} initialTab={qualityView} rawFilter={qualityRaw} onRaw={setRawId} openIssues={issues} results={results} versions={versions} rules={q.rules} onSelect={setIssue} onRun={setRunId} runFilter={qualityRun} clearRunFilter={() => { setQualityRun(null); setQualityRaw(null); }}/>
+        <Tabs value={qualityTab} onChange={setQualityTab} items={[['validation', 'Kiểm tra & Vi phạm'], ['financial', 'Chất lượng BCTC & Công bố']]}/>
+        {qualityTab === 'validation' ? (
+          <>
+            <div className="management-toolbar">
+              <div className="header-actions"><button className="light-button" onClick={() => setOperation({ kind: 'validate-pending' })}>Validate dữ liệu chờ</button></div>
+              <span className="subtle">{writeNote}</span>
+            </div>
+            <DataQualityPage key={`${qualityRun}-${qualityRaw}-${qualityView}`} initialTab={qualityView} rawFilter={qualityRaw} onRaw={setRawId} openIssues={issues} results={results} versions={versions} rules={q.rules} onSelect={setIssue} onRun={setRunId} runFilter={qualityRun} clearRunFilter={() => { setQualityRun(null); setQualityRaw(null); }}/>
+          </>
+        ) : (
+          <FinancialQualityPage />
+        )}
       </>}
 
       {section === 'ai' && <AiOperationsPage onRun={setRunId}/>}
       {section === 'data' && <DataBrowser onRun={setRunId} onRaw={setRawId}/>}
 
       {section === 'system' && <>
-        <Tabs value={systemTab} onChange={setSystemTab} items={[['status', 'Trạng thái & độ phủ'], ['api', 'API quản trị nâng cao']]}/>
-        {systemTab === 'status' ? <><RuntimePage onWorkflow={openWorkflow}/><SchedulePanel/></> : <NativeApiPage/>}
+        <Tabs value={systemTab} onChange={setSystemTab} items={[['status', 'Trạng thái & độ phủ'], ['market', 'Dữ liệu thị trường'], ['api', 'API quản trị nâng cao']]}/>
+        {systemTab === 'status' ? <><RuntimePage onWorkflow={openWorkflow}/><SchedulePanel/></> : systemTab === 'market' ? <MarketDataAdminPage/> : <NativeApiPage/>}
       </>}
     </div>
     <RunDrawer onRaw={id => { setRunId(null); setRawId(id); }} onIssue={value => { setRunId(null); setIssue(value); }} id={runId} onClose={() => setRunId(null)} onOperation={setOperation} onJob={id => { setRunId(null); openJobs(id); }} onSource={id => { setRunId(null); openSources(id); }} onQuality={id => { setRunId(null); openQuality(id, null, 'validation'); }}/>
