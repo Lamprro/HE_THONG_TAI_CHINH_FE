@@ -1,6 +1,6 @@
 import type { ValidationRule } from '../../operations/contracts';
 import { useMemo, useState } from 'react';
-import { ArrowUpRight, ChevronRight, RefreshCw, Wrench } from 'lucide-react';
+import { ArrowUpRight, ChevronRight, RefreshCw, RotateCcw, Wrench } from 'lucide-react';
 import type { UseQueryResult } from '@tanstack/react-query';
 import type { DataVersion, ValidationResult } from '../../dashboard/types/dto';
 import { LINKED_LIMIT, useLinkedValidation, useLinkedVersions } from '../../dashboard/api/queries';
@@ -25,8 +25,17 @@ export function IssuesPreview({ issues, onSelect, onViewAll }: { issues: UseQuer
 export function ValidationDrawer({ issue, onClose, onRun, onRaw, onWorkflow }: { issue: ValidationResult | null; onClose: () => void; onRun: (id: string) => void; onRaw: (id: string) => void; onWorkflow?: (selection: WorkflowSelection) => void }) {
   if (!issue) return null;
   return <Drawer title={issue.ruleCode} subtitle={`Kết quả validation ${issue.id}`} onClose={onClose}><div className="detail-grid"><div><span>Mức độ</span><Badge tone={severityTone(issue.severity)}>{issue.severity}</Badge></div><div><span>Kết quả</span><b>{issue.status}</b></div><div><span>Xử lý</span><b>{issue.handlingStatus}</b></div><div><span>Raw payload ID</span><b className="break">{(issue.rawPayloadId || '—')}</b></div><div><span>Kiểm tra lúc</span><b>{dateTime(issue.checkedAt)}</b></div><div><span>Luật ID</span><b>{issue.validationRuleId}</b></div></div><div className="detail-section"><div className="eyebrow">THÔNG BÁO</div><p>{safeText(issue.message)}</p></div><div className="detail-section"><div className="eyebrow">GIÁ TRỊ THỰC TẾ / KỲ VỌNG</div><p>Thực tế: {safeText(issue.observedValue)}</p><p>Kỳ vọng: {safeText(issue.expectedValue)}</p></div>{issue.resolutionNote && <div className="detail-section"><div className="eyebrow">GHI CHÚ XỬ LÝ</div><p>{safeText(issue.resolutionNote)}</p></div>}<div className="detail-section"><div className="eyebrow">BẢN GHI LIÊN QUAN</div><p>Người xử lý: {issue.resolvedByUserId || '—'}</p><p>Xử lý lúc: {dateTime(issue.resolvedAt)}</p><p className="break">Lượt chạy ID: {issue.ingestionRunId || '—'}</p></div>
+    {issue.status === 'FAIL' && issue.handlingStatus === 'OPEN' && issue.ingestionRunId && onWorkflow && (
+      <div className="detail-section" style={{ background: 'var(--panel-alt, #f8fafc)', padding: '0.75rem', borderRadius: '4px', border: '1px solid var(--border, #e2e8f0)' }}>
+        <div className="eyebrow">KHẮC PHỤC LỖI QUA WORKFLOW</div>
+        <p style={{ margin: '0.25rem 0 0.5rem', fontSize: '0.875rem' }}>Chọn hướng khắc phục cho lượt chạy <code>{issue.ingestionRunId}</code>:</p>
+        <div style={{ display: 'flex', gap: '0.5rem', flexWrap: 'wrap' }}>
+          <button className="primary-button" title="Chạy lại với payload đã lưu trong database" onClick={() => { onClose(); onWorkflow({ mode: 'PROCESS_RUN', runId: issue.ingestionRunId!, reason: `Xử lý lại payload đã lưu cho lỗi ${issue.ruleCode} (${issue.ingestionRunId})` }); }}><Wrench size={14}/> Xử lý lại (PROCESS_RUN)</button>
+          <button className="light-button" title="Lấy lại dữ liệu từ nhà cung cấp nguồn" onClick={() => { onClose(); onWorkflow({ mode: 'REPLAY_RUN', runId: issue.ingestionRunId!, reason: `Lấy lại từ nguồn cho lỗi ${issue.ruleCode} (${issue.ingestionRunId})` }); }}><RotateCcw size={14}/> Lấy lại từ nguồn (REPLAY_RUN)</button>
+        </div>
+      </div>
+    )}
     <div className="operation-actions">
-      {issue.ingestionRunId && onWorkflow && <button className="primary-button" onClick={() => { onClose(); onWorkflow({ mode: 'PROCESS_RUN', runId: issue.ingestionRunId!, reason: `Khắc phục lỗi ${issue.ruleCode} của lượt chạy ${issue.ingestionRunId}` }); }}><Wrench size={14}/> Khắc phục qua Workflow</button>}
       {issue.rawPayloadId && <button className="light-button" onClick={() => onRaw(issue.rawPayloadId!)}>Xem raw payload</button>}
       {issue.ingestionRunId && <button className="light-button" onClick={() => { onClose(); onRun(issue.ingestionRunId!); }}>Xem lượt chạy <ArrowUpRight size={14}/></button>}
     </div>

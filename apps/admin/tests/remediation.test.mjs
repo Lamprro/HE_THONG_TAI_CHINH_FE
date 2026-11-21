@@ -1,56 +1,81 @@
 import { test } from 'node:test';
 import assert from 'node:assert/strict';
+import {
+  getLatestTradingWeekday,
+  computeRowStatus,
+  buildPriceRemediation,
+  buildStatementRemediation,
+} from '../src/features/admin/coverage';
 
-test('coverage remediation generates correct initial workflow selection', () => {
-  const symbol = 'HPG';
-  const lastPrice = '2026-11-19';
-  const d = new Date(lastPrice);
-  d.setDate(d.getDate() + 1);
-  const nextDate = d.toISOString().slice(0, 10);
-  const today = '2026-11-20';
+test('getLatestTradingWeekday rolls back weekend days to Friday', () => {
+  // Sunday 2026-11-22 10:00 UTC -> should roll back to Friday 2026-11-20
+  const sunday = new Date('2026-11-22T10:00:00Z');
+  assert.equal(getLatestTradingWeekday(sunday), '2026-11-20');
 
-  const priceSelection = {
-    mode: 'INGEST_VALIDATE_BUILD',
-    operation: 'OHLCV',
-    source: 'VNDIRECT',
-    symbol,
-    startDate: nextDate,
-    endDate: today,
-    reason: `Bổ sung khoảng thiếu giá lịch sử cho mã ${symbol} từ ${nextDate} đến ${today}`,
-  };
+  // Saturday 2026-11-21 10:00 UTC -> should roll back to Friday 2026-11-20
+  const saturday = new Date('2026-11-21T10:00:00Z');
+  assert.equal(getLatestTradingWeekday(saturday), '2026-11-20');
 
-  assert.equal(priceSelection.mode, 'INGEST_VALIDATE_BUILD');
-  assert.equal(priceSelection.operation, 'OHLCV');
-  assert.equal(priceSelection.symbol, 'HPG');
-  assert.equal(priceSelection.startDate, '2026-11-20');
-  assert.match(priceSelection.reason, /Bổ sung khoảng thiếu giá/);
-
-  const statementSelection = {
-    mode: 'INGEST_VALIDATE_BUILD',
-    operation: 'FINANCIAL_STATEMENT',
-    source: 'VNDIRECT',
-    symbol,
-    statement: 'balance_sheet',
-    period: 'quarter',
-    reason: `Lấy và cập nhật báo cáo tài chính cho mã ${symbol}`,
-  };
-
-  assert.equal(statementSelection.mode, 'INGEST_VALIDATE_BUILD');
-  assert.equal(statementSelection.operation, 'FINANCIAL_STATEMENT');
-  assert.equal(statementSelection.statement, 'balance_sheet');
-  assert.equal(statementSelection.period, 'quarter');
+  // Wednesday 2026-11-18 10:00 UTC -> remains Wednesday 2026-11-18
+  const wednesday = new Date('2026-11-18T10:00:00Z');
+  assert.equal(getLatestTradingWeekday(wednesday), '2026-11-18');
 });
 
-test('local ai research boundary guards keep execution and public publishing disabled', () => {
-  const modelState = {
-    readiness: 'RESEARCH_ONLY',
-    publicResultsAvailable: false,
-    executionAvailable: false,
-    featureSubmissionAllowed: false,
-  };
+test('computeRowStatus correctly evaluates price, statement, and healthy gaps', () => {
+  const latestTradingDay = '2026-11-20';
 
-  assert.equal(modelState.readiness, 'RESEARCH_ONLY');
-  assert.equal(modelState.publicResultsAvailable, false);
-  assert.equal(modelState.executionAvailable, false);
-  assert.equal(modelState.featureSubmissionAllowed, false);
+  // No prices -> GAP_PRICE
+  assert.equal(computeRowStatus(0, null, 10, latestTradingDay), 'GAP_PRICE');
+
+  // Outdated price (2026-11-15 < 2026-11-20) -> GAP_PRICE
+  assert.equal(computeRowStatus(500, '2026-11-15', 10, latestTradingDay), 'GAP_PRICE');
+
+  // Up-to-date price (2026-11-20) but no statements -> GAP_STATEMENTS
+  assert.equal(computeRowStatus(500, '2026-11-20', 0, latestTradingDay), 'GAP_STATEMENTS');
+
+  // Up-to-date price and positive statements -> HEALTHY
+  assert.equal(computeRowStatus(500, '2026-11-20', 8, latestTradingDay), 'HEALTHY');
+});
+
+test('buildPriceRemediation builds valid range and maps index operations', () => {
+  const latestTradingDay = '2026-11-20';
+
+  // Regular stock HPG
+  const hpgSelection = buildPriceRemediation('HPG', '2026-11-18', latestTradingDay);
+  assert.equal(hpgSelection.mode, 'INGEST_VALIDATE_BUILD');
+  assert.equal(hpgSelection.operation, 'OHLCV');
+  assert.equal(hpgSelection.symbol, 'HPG');
+  assert.equal(hpgSelection.startDate, '2026-11-19');
+  assert.equal(hpgSelection.endDate, '2026-11-20');
+  assert.match(hpgSelection.reason, /Bổ sung khoảng thiếu giá lịch sử cho mã HPG/);
+
+  // Index symbol VN30 -> operation INDEX_OHLCV
+  const vn30Selection = buildPriceRemediation('VN30', '2026-11-18', latestTradingDay);
+  assert.equal(vn30Selection.operation, 'INDEX_OHLCV');
+  assert.equal(vn30Selection.symbol, 'VN30');
+
+  // When already up to date (lastPrice is latestTradingDay), startDate is capped at latestTradingDay
+  const upToDateSelection = buildPriceRemediation('FPT', '2026-11-20', latestTradingDay);
+  assert.equal(upToDateSelection.startDate, '2026-11-20');
+  assert.equal(upToDateSelection.endDate, '2026-11-20');
+
+  // When lastPrice is null or placeholder '—', defaults to 2021-01-01
+  const emptyPriceSelection = buildPriceRemediation('NEW', '—', latestTradingDay);
+  assert.equal(emptyPriceSelection.startDate, '2021-01-01');
+  assert.equal(emptyPriceSelection.endDate, latestTradingDay);
+});
+
+test('buildStatementRemediation supports configurable types and periods', () => {
+  const balanceSheet = buildStatementRemediation('VNM', 'balance_sheet', 'quarter', 'CAFEF');
+  assert.equal(balanceSheet.mode, 'INGEST_VALIDATE_BUILD');
+  assert.equal(balanceSheet.operation, 'FINANCIAL_STATEMENT');
+  assert.equal(balanceSheet.symbol, 'VNM');
+  assert.equal(balanceSheet.statement, 'balance_sheet');
+  assert.equal(balanceSheet.period, 'quarter');
+  assert.equal(balanceSheet.source, 'CAFEF');
+  assert.match(balanceSheet.reason, /balance_sheet\/quarter/);
+
+  const incomeStatement = buildStatementRemediation('ACB', 'income_statement', 'year', 'VNDIRECT');
+  assert.equal(incomeStatement.statement, 'income_statement');
+  assert.equal(incomeStatement.period, 'year');
 });

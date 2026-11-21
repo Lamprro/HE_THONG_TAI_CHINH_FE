@@ -33,13 +33,6 @@ export function AiCenterPage() {
       <QueryState loading={catalog.isPending} error={catalog.error} empty={!catalog.data?.items.length} retry={catalog.refetch}><div className="table-scroll"><table><thead><tr><th>Mô hình</th><th>Nhóm</th><th>Kỳ</th><th>Thuật toán chọn</th><th>Đầu ra</th><th className="number">Input đã đăng ký</th><th className="number">Kết quả nghiên cứu</th><th>Dữ liệu</th><th>Cổng dev</th></tr></thead>
         <tbody>{catalog.data?.items.map(m => <tr key={m.packageId + m.modelId}><td><strong>{m.modelId}</strong></td><td>{families[m.modelId.split('_')[0]] || '—'}</td><td>H{m.horizonQuarters} · {m.targetPeriod}</td><td>{m.selectedAlgorithm}</td><td>{text(m.outputContract?.type)}<small title={m.outputContract?.note}>{text(m.outputContract?.unit)}</small></td><td className="number">{decimal(m.registeredInputs)}</td><td className="number">{decimal(m.storedSelectedResearchResults)}</td><td>{date(m.firstInputAsOf)} → {date(m.lastInputAsOf)}</td><td>{m.developmentGatePassed ? <span className="positive">Đạt</span> : <span className="muted">Chưa đạt</span>}</td></tr>)}</tbody></table></div></QueryState>
       <div className="ai-guard"><ShieldAlert size={16} /><p>Gói đang ở trạng thái <b>RESEARCH_ONLY</b>: chưa có chính sách công bố nên giá trị dự đoán không được trả cho người dùng. Cổng dev là bằng chứng chọn mô hình, không phải độ chính xác dự báo tương lai. Trang chỉ đọc, không chạy mô hình hay gửi dữ liệu.</p></div>
-      <div className="mini-record" style={{ marginTop: '0.75rem', background: 'var(--panel-alt, #f8fafc)', border: '1px solid var(--border, #e2e8f0)' }}>
-        <strong>Thông tin tiến độ: Gói Xếp hạng 100 mã (Rank 100 V1 FACTOR_COMPOSITE)</strong>
-        <p style={{ margin: '0.25rem 0 0', fontSize: '0.875rem' }}>
-          Đã hoàn thành huấn luyện trên 260.855 phiên canonical (cửa sổ 2016–2026, 100 mã HOSE) và nghiệm thu 99/99 dự đoán trong schema cô lập.
-          Mô hình đang ở giai đoạn đánh giá forward (khóa dự báo trước khi có kết quả thực tế) và giữ nguyên trạng thái nghiên cứu nội bộ.
-        </p>
-      </div>
       <Note>{catalog.data?.meta.notes?.join(' ') || ''}</Note>
     </section>
     {a && a.localAi.registry.length > 0 && <section className="panel"><div className="panel-heading"><h2>Registry mô hình (model_versions)</h2></div><div className="table-scroll"><table><thead><tr><th>Mục tiêu</th><th>Trạng thái</th><th className="number">Số bản</th></tr></thead><tbody>{a.localAi.registry.map((r: Row & { target: string; status: string; count: string }) => <tr key={r.target + r.status}><td>{r.target}</td><td>{r.status}</td><td className="number">{decimal(r.count)}</td></tr>)}</tbody></table></div></section>}

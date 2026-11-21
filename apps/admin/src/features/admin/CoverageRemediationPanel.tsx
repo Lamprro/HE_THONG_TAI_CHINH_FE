@@ -1,10 +1,16 @@
 import { useMemo, useState } from 'react';
 import { useQuery } from '@tanstack/react-query';
-import { AlertTriangle, CheckCircle2, Database, ExternalLink, Filter, PlayCircle, RefreshCw, Search } from 'lucide-react';
+import { AlertTriangle, CheckCircle2, Database, Filter, PlayCircle, RefreshCw, Search } from 'lucide-react';
 import { API_BASE, getJson } from '../../shared/api/client';
 import { Badge, Drawer, Panel, QueryState } from '../../shared/components/Ui';
 import { dateTime, safeText } from '../../shared/utils/format';
 import type { WorkflowSelection } from './WorkflowPage';
+import {
+  buildPriceRemediation,
+  buildStatementRemediation,
+  computeRowStatus,
+  getLatestTradingWeekday,
+} from './coverage';
 
 interface PriceCoverageRow {
   symbol: string;
@@ -52,10 +58,25 @@ interface FinancialQualityCoverage {
   limitation?: string;
 }
 
+interface ExternalCapability {
+  operation: string;
+  provider: string;
+  native_adapter?: boolean;
+  maximum_calendar_days?: number;
+  symbols?: string[];
+}
+
 export function CoverageRemediationPanel({ onWorkflow }: { onWorkflow?: (selection: WorkflowSelection) => void }) {
   const [search, setSearch] = useState('');
   const [filter, setFilter] = useState<'ALL' | 'GAP_PRICE' | 'GAP_STATEMENTS' | 'HEALTHY'>('ALL');
   const [selectedSymbol, setSelectedSymbol] = useState<string | null>(null);
+
+  // Statement drawer config state
+  const [selectedStatementType, setSelectedStatementType] = useState('balance_sheet');
+  const [selectedPeriod, setSelectedPeriod] = useState('quarter');
+  const [selectedSource, setSelectedSource] = useState('VNDIRECT');
+
+  const latestTradingWeekday = useMemo(() => getLatestTradingWeekday(), []);
 
   const priceCoverage = useQuery({
     queryKey: ['admin-quality-coverage'],
@@ -75,6 +96,18 @@ export function CoverageRemediationPanel({ onWorkflow }: { onWorkflow?: (selecti
     staleTime: 60000,
   });
 
+  const capabilities = useQuery({
+    queryKey: ['external-capabilities'],
+    queryFn: () => getJson<{ capabilities?: ExternalCapability[] }>(API_BASE, '/api/external-financial-data/capabilities').catch(() => ({ capabilities: [] })),
+    staleTime: 300000,
+  });
+
+  const statementProviders = useMemo(() => {
+    const list = capabilities.data?.capabilities?.filter(c => c.operation === 'FINANCIAL_STATEMENT' || c.operation === 'STATEMENTS') || [];
+    const providers = list.map(c => c.provider.toUpperCase());
+    return providers.length > 0 ? Array.from(new Set(providers)) : ['VNDIRECT', 'CAFEF'];
+  }, [capabilities.data]);
+
   const statementMap = useMemo(() => {
     const map = new Map<string, StatementCoverageRow>();
     statementCoverage.data?.forEach(row => map.set(row.symbol, row));
@@ -88,12 +121,8 @@ export function CoverageRemediationPanel({ onWorkflow }: { onWorkflow?: (selecti
       const prices = Number(priceRow.daily_prices || 0);
       const stmts = Number(stmtRow?.canonical_statements || 0);
       const lastPrice = priceRow.last_price ? priceRow.last_price.slice(0, 10) : null;
-      const isPriceGap = prices === 0 || (lastPrice && lastPrice < '2026-11-19');
-      const isStatementGap = stmts === 0;
-
-      let status: 'HEALTHY' | 'GAP_PRICE' | 'GAP_STATEMENTS' = 'HEALTHY';
-      if (isPriceGap) status = 'GAP_PRICE';
-      else if (isStatementGap) status = 'GAP_STATEMENTS';
+      
+      const status = computeRowStatus(prices, lastPrice, stmts, latestTradingWeekday);
 
       return {
         symbol: priceRow.symbol,
@@ -107,7 +136,7 @@ export function CoverageRemediationPanel({ onWorkflow }: { onWorkflow?: (selecti
         status,
       };
     });
-  }, [priceCoverage.data, statementMap]);
+  }, [priceCoverage.data, statementMap, latestTradingWeekday]);
 
   const filteredRows = useMemo(() => {
     const term = search.trim().toUpperCase();
@@ -123,44 +152,26 @@ export function CoverageRemediationPanel({ onWorkflow }: { onWorkflow?: (selecti
     [combinedRows, selectedSymbol]
   );
 
-  const remediatePrice = (symbol: string, lastPrice: string) => {
-    const nextDate = lastPrice && lastPrice !== '—'
-      ? (() => {
-          const d = new Date(lastPrice);
-          d.setDate(d.getDate() + 1);
-          return d.toISOString().slice(0, 10);
-        })()
-      : '2021-01-01';
-    const today = new Intl.DateTimeFormat('en-CA', { timeZone: 'Asia/Ho_Chi_Minh', year: 'numeric', month: '2-digit', day: '2-digit' }).format(new Date());
-
-    onWorkflow?.({
-      mode: 'INGEST_VALIDATE_BUILD',
-      operation: 'OHLCV',
-      source: 'VNDIRECT',
-      symbol,
-      startDate: nextDate,
-      endDate: today,
-      reason: `Bổ sung khoảng thiếu giá lịch sử cho mã ${symbol} từ ${nextDate} đến ${today}`,
-    });
+  const remediatePrice = (symbol: string, lastPrice: string | null) => {
+    const selection = buildPriceRemediation(symbol, lastPrice, latestTradingWeekday);
+    onWorkflow?.(selection);
   };
 
-  const remediateStatement = (symbol: string) => {
-    onWorkflow?.({
-      mode: 'INGEST_VALIDATE_BUILD',
-      operation: 'FINANCIAL_STATEMENT',
-      source: 'VNDIRECT',
-      symbol,
-      statement: 'balance_sheet',
-      period: 'quarter',
-      reason: `Lấy và cập nhật báo cáo tài chính cho mã ${symbol}`,
-    });
+  const remediateStatement = (
+    symbol: string,
+    statement: string = selectedStatementType,
+    period: string = selectedPeriod,
+    source: string = selectedSource
+  ) => {
+    const selection = buildStatementRemediation(symbol, statement, period, source);
+    onWorkflow?.(selection);
   };
 
   return (
     <Panel
       title="Ma trận độ phủ & Xử lý khoảng thiếu dữ liệu"
       eyebrow="GIÁM SÁT & BÙ ĐẮP DỮ LIỆU"
-      note="Kiểm tra độ phủ thực tế từ database: phát hiện khoảng thiếu theo mã/kỳ và 1-click kích hoạt workflow xử lý."
+      note={`Kiểm tra độ phủ thực tế từ database tính đến phiên gần nhất (${latestTradingWeekday}): phát hiện khoảng thiếu theo mã/kỳ và 1-click kích hoạt workflow xử lý.`}
       action={
         <button
           className="text-button"
@@ -199,47 +210,60 @@ export function CoverageRemediationPanel({ onWorkflow }: { onWorkflow?: (selecti
         </div>
       </div>
 
-      <div className="toolbar filters">
-        <label>
-          <Search size={14} style={{ display: 'inline', marginRight: 4 }} />
-          Tìm mã
+      <div className="toolbar" style={{ display: 'flex', gap: '0.75rem', flexWrap: 'wrap', marginBottom: '1rem' }}>
+        <div style={{ position: 'relative', flex: '1 1 200px' }}>
+          <Search size={15} style={{ position: 'absolute', left: 10, top: 10, color: 'var(--muted, #64748b)' }} />
           <input
+            type="text"
+            placeholder="Tìm theo mã (vd: FPT, HPG)..."
             value={search}
             onChange={e => setSearch(e.target.value)}
-            placeholder="FPT, VNM, HPG…"
-            style={{ textTransform: 'uppercase' }}
+            style={{ width: '100%', paddingLeft: '2rem' }}
           />
-        </label>
+        </div>
 
-        <label>
-          <Filter size={14} style={{ display: 'inline', marginRight: 4 }} />
-          Trạng thái dữ liệu
-          <select value={filter} onChange={e => setFilter(e.target.value as typeof filter)}>
-            <option value="ALL">Tất cả ({combinedRows.length})</option>
-            <option value="GAP_PRICE">Cần cập nhật giá ({combinedRows.filter(r => r.status === 'GAP_PRICE').length})</option>
-            <option value="GAP_STATEMENTS">Thiếu BCTC ({combinedRows.filter(r => r.status === 'GAP_STATEMENTS').length})</option>
-            <option value="HEALTHY">Đầy đủ ({combinedRows.filter(r => r.status === 'HEALTHY').length})</option>
-          </select>
-        </label>
-        <span className="subtle">{filteredRows.length} mã hiển thị</span>
+        <div style={{ display: 'flex', gap: '0.35rem', alignItems: 'center' }}>
+          <Filter size={15} color="var(--muted, #64748b)" />
+          <button
+            className={filter === 'ALL' ? 'active-filter' : 'light-button'}
+            onClick={() => setFilter('ALL')}
+          >
+            Tất cả ({combinedRows.length})
+          </button>
+          <button
+            className={filter === 'GAP_PRICE' ? 'active-filter' : 'light-button'}
+            onClick={() => setFilter('GAP_PRICE')}
+          >
+            Cần bù giá ({combinedRows.filter(r => r.status === 'GAP_PRICE').length})
+          </button>
+          <button
+            className={filter === 'GAP_STATEMENTS' ? 'active-filter' : 'light-button'}
+            onClick={() => setFilter('GAP_STATEMENTS')}
+          >
+            Thiếu BCTC ({combinedRows.filter(r => r.status === 'GAP_STATEMENTS').length})
+          </button>
+          <button
+            className={filter === 'HEALTHY' ? 'active-filter' : 'light-button'}
+            onClick={() => setFilter('HEALTHY')}
+          >
+            Đạt chuẩn ({combinedRows.filter(r => r.status === 'HEALTHY').length})
+          </button>
+        </div>
       </div>
 
-      <QueryState
-        query={priceCoverage}
-        empty="Chưa có dữ liệu độ phủ giá."
-      >
+      <QueryState query={priceCoverage} empty="Chưa có dữ liệu độ phủ từ hệ thống.">
         <div className="table-scroll">
           <table>
             <thead>
               <tr>
-                <th>Mã CK</th>
-                <th>Số phiên giá</th>
+                <th>Mã</th>
+                <th className="number">Phiên giá</th>
                 <th>Dải ngày giá</th>
-                <th>BCTC canonical</th>
-                <th>Thiếu ngày CB</th>
-                <th>Tài liệu công bố</th>
-                <th>Trạng thái</th>
-                <th style={{ textAlign: 'right' }}>Hành động xử lý</th>
+                <th className="number">Báo cáo (CĐKT)</th>
+                <th className="number">Thiếu ngày CB</th>
+                <th className="number">Tài liệu CB</th>
+                <th>Tình trạng</th>
+                <th style={{ textAlign: 'right' }}>Hành động khắc phục</th>
               </tr>
             </thead>
             <tbody>
@@ -248,21 +272,22 @@ export function CoverageRemediationPanel({ onWorkflow }: { onWorkflow?: (selecti
                   <td>
                     <button
                       className="text-button"
-                      style={{ fontWeight: 'bold' }}
+                      style={{ fontWeight: 600, cursor: 'pointer' }}
                       onClick={() => setSelectedSymbol(row.symbol)}
+                      title="Bấm để xem chi tiết tình trạng và giải pháp khắc phục"
                     >
                       {row.symbol}
                     </button>
                   </td>
-                  <td>{row.dailyPrices.toLocaleString('vi-VN')}</td>
+                  <td className="number">{row.dailyPrices.toLocaleString('vi-VN')}</td>
                   <td>
                     <small>
                       {row.firstPrice} → {row.lastPrice}
                     </small>
                   </td>
-                  <td>{row.canonicalStatements}</td>
-                  <td>{row.missingPub > 0 ? <span style={{ color: 'var(--warning, #f59e0b)' }}>{row.missingPub}</span> : '0'}</td>
-                  <td>{row.officialDocs}</td>
+                  <td className="number">{row.canonicalStatements}</td>
+                  <td className="number">{row.missingPub > 0 ? <span style={{ color: 'var(--warning, #f59e0b)' }}>{row.missingPub}</span> : '0'}</td>
+                  <td className="number">{row.officialDocs}</td>
                   <td>
                     {row.status === 'HEALTHY' ? (
                       <Badge tone="green">Đầy đủ</Badge>
@@ -273,19 +298,28 @@ export function CoverageRemediationPanel({ onWorkflow }: { onWorkflow?: (selecti
                     )}
                   </td>
                   <td style={{ textAlign: 'right', whiteSpace: 'nowrap' }}>
+                    {row.status === 'HEALTHY' ? (
+                      <span className="subtle" style={{ fontSize: '0.8rem', marginRight: 6 }}>
+                        <CheckCircle2 size={13} style={{ verticalAlign: 'middle', marginRight: 3, color: 'var(--positive, #10b981)' }} />
+                        Đủ dữ liệu
+                      </span>
+                    ) : (
+                      <button
+                        className="light-button"
+                        style={{ marginRight: 6 }}
+                        title={`Bù đắp dữ liệu giá thiếu cho ${row.symbol} qua Workflow`}
+                        onClick={() => remediatePrice(row.symbol, row.lastPrice)}
+                      >
+                        <PlayCircle size={13} style={{ marginRight: 3, verticalAlign: 'middle' }} />
+                        Bù giá
+                      </button>
+                    )}
                     <button
                       className="light-button"
-                      style={{ marginRight: 6 }}
-                      title="Bù đắp dữ liệu giá thiếu qua Workflow"
-                      onClick={() => remediatePrice(row.symbol, row.lastPrice)}
-                    >
-                      <PlayCircle size={13} style={{ marginRight: 3, verticalAlign: 'middle' }} />
-                      Bù giá
-                    </button>
-                    <button
-                      className="light-button"
-                      title="Lấy BCTC cập nhật qua Workflow"
-                      onClick={() => remediateStatement(row.symbol)}
+                      title={`Lấy báo cáo tài chính cho ${row.symbol} qua Workflow`}
+                      onClick={() => {
+                        setSelectedSymbol(row.symbol);
+                      }}
                     >
                       <Database size={13} style={{ marginRight: 3, verticalAlign: 'middle' }} />
                       Lấy BCTC
@@ -311,7 +345,7 @@ export function CoverageRemediationPanel({ onWorkflow }: { onWorkflow?: (selecti
                   <th>Tên chỉ số</th>
                   <th>Tần suất</th>
                   <th>Đơn vị</th>
-                  <th>Số quan sát</th>
+                  <th className="number">Số quan sát</th>
                   <th>Dải ngày</th>
                 </tr>
               </thead>
@@ -322,7 +356,7 @@ export function CoverageRemediationPanel({ onWorkflow }: { onWorkflow?: (selecti
                     <td>{m.name}</td>
                     <td>{m.frequency}</td>
                     <td>{m.unit}</td>
-                    <td>{Number(m.observation_count).toLocaleString('vi-VN')}</td>
+                    <td className="number">{Number(m.observation_count).toLocaleString('vi-VN')}</td>
                     <td><small>{safeText(m.first_period_end)} → {safeText(m.last_period_end)}</small></td>
                   </tr>
                 ))}
@@ -335,7 +369,7 @@ export function CoverageRemediationPanel({ onWorkflow }: { onWorkflow?: (selecti
       {selectedDetail && (
         <Drawer
           title={`Chi tiết độ phủ mã ${selectedDetail.symbol}`}
-          subtitle="Phân tích tình trạng dữ liệu và giải pháp khắc phục"
+          subtitle={`Phiên giao dịch gần nhất: ${latestTradingWeekday}`}
           onClose={() => setSelectedSymbol(null)}
         >
           <div className="detail-section">
@@ -371,18 +405,57 @@ export function CoverageRemediationPanel({ onWorkflow }: { onWorkflow?: (selecti
           </div>
 
           <div className="detail-section">
-            <div className="eyebrow">HÀNH ĐỘNG KHẮC PHỤC (REMEDIATION)</div>
+            <div className="eyebrow">CẤU HÌNH BÙ ĐẮP BÁO CÁO TÀI CHÍNH</div>
+            <div style={{ display: 'grid', gridTemplateColumns: '1fr 1fr 1fr', gap: '0.5rem', marginTop: '0.5rem' }}>
+              <div>
+                <label style={{ display: 'block', fontSize: '0.75rem', marginBottom: 2 }}>Loại BCTC</label>
+                <select
+                  value={selectedStatementType}
+                  onChange={e => setSelectedStatementType(e.target.value)}
+                  style={{ width: '100%' }}
+                >
+                  <option value="balance_sheet">Cân đối kế toán</option>
+                  <option value="income_statement">Kết quả kinh doanh</option>
+                  <option value="cash_flow">Lưu chuyển tiền tệ</option>
+                </select>
+              </div>
+              <div>
+                <label style={{ display: 'block', fontSize: '0.75rem', marginBottom: 2 }}>Kỳ báo cáo</label>
+                <select
+                  value={selectedPeriod}
+                  onChange={e => setSelectedPeriod(e.target.value)}
+                  style={{ width: '100%' }}
+                >
+                  <option value="quarter">Theo quý</option>
+                  <option value="year">Theo năm</option>
+                </select>
+              </div>
+              <div>
+                <label style={{ display: 'block', fontSize: '0.75rem', marginBottom: 2 }}>Nguồn cung cấp</label>
+                <select
+                  value={selectedSource}
+                  onChange={e => setSelectedSource(e.target.value)}
+                  style={{ width: '100%' }}
+                >
+                  {statementProviders.map(p => (
+                    <option key={p} value={p}>{p}</option>
+                  ))}
+                </select>
+              </div>
+            </div>
+          </div>
+
+          <div className="detail-section">
+            <div className="eyebrow">HÀNH ĐỘNG KHẮC PHỤC QUA WORKFLOW</div>
             <p>
-              Bấm vào hành động dưới đây để tự động mở màn hình <strong>Luồng dữ liệu</strong> kèm các tham số đã được điền sẵn theo khoảng thiếu.
+              Chọn hành động để chuyển thẳng sang màn hình <strong>Luồng dữ liệu</strong> kèm các tham số đã được điền sẵn:
             </p>
-            <div className="toolbar" style={{ marginTop: '0.75rem' }}>
+            <div className="toolbar" style={{ marginTop: '0.75rem', display: 'flex', gap: '0.5rem' }}>
               <button
                 className="primary-button"
+                disabled={selectedDetail.status === 'HEALTHY'}
                 onClick={() => {
-                  const sym = selectedDetail.symbol;
-                  const lp = selectedDetail.lastPrice;
-                  setSelectedSymbol(null);
-                  remediatePrice(sym, lp);
+                  remediatePrice(selectedDetail.symbol, selectedDetail.lastPrice);
                 }}
               >
                 <PlayCircle size={15} style={{ marginRight: 4 }} />
@@ -391,9 +464,7 @@ export function CoverageRemediationPanel({ onWorkflow }: { onWorkflow?: (selecti
               <button
                 className="light-button"
                 onClick={() => {
-                  const sym = selectedDetail.symbol;
-                  setSelectedSymbol(null);
-                  remediateStatement(sym);
+                  remediateStatement(selectedDetail.symbol, selectedStatementType, selectedPeriod, selectedSource);
                 }}
               >
                 <Database size={15} style={{ marginRight: 4 }} />

@@ -155,7 +155,7 @@ function Dashboard() {
 
       {section === 'system' && <>
         <Tabs value={systemTab} onChange={setSystemTab} items={[['status', 'Trạng thái & độ phủ'], ['api', 'API quản trị nâng cao']]}/>
-        {systemTab === 'status' ? <><RuntimePage/><SchedulePanel/></> : <NativeApiPage/>}
+        {systemTab === 'status' ? <><RuntimePage onWorkflow={openWorkflow}/><SchedulePanel/></> : <NativeApiPage/>}
       </>}
     </div>
     <RunDrawer onRaw={id => { setRunId(null); setRawId(id); }} onIssue={value => { setRunId(null); setIssue(value); }} id={runId} onClose={() => setRunId(null)} onOperation={setOperation} onJob={id => { setRunId(null); openJobs(id); }} onSource={id => { setRunId(null); openSources(id); }} onQuality={id => { setRunId(null); openQuality(id, null, 'validation'); }}/>
