@@ -27,7 +27,8 @@ await page.route('**/api/**',async route=>{const request=route.request(),url=new
     if(path==='/api/admin/console/schedule')return reply({enabled:body.enabled,job_codes:body.jobCodes,version:1});
     return reply({message:'Unexpected fixture mutation'},400);
   }
-  if(path==='/api/admin/console/session')return reply({authenticated:true});if(path==='/api/health')return reply({status:'UP'});
+  if (path === '/api/admin/console/runtime') return reply({ database: 'UP', timezone: 'Asia/Ho_Chi_Minh', schedulers: {}, adminWorkers: { commandsEnabled: false, scheduleEnabled: false } });
+  if(path==='/api/admin/console/session')return reply({ authenticated: true, principal: 'fixture-admin', email: null, authorities: ['ROLE_ADMIN'] });if(path==='/api/health')return reply({status:'UP'});
   if(path==='/api/ingestion-jobs')return reply([job]);if(path==='/api/data-sources')return reply([source]);if(path==='/api/securities')return reply([{id:id(5),symbol:'FPT',exchange:'HOSE',active:true}]);
   if(path==='/api/admin/console/summary')return reply({jobs:[{is_active:true,count:1}],commands:[],runs:[],versions:[],validation:[]});
   if(path.startsWith('/api/admin/console/commands/'))return reply(commands.get(path.split('/').at(-1))||{});

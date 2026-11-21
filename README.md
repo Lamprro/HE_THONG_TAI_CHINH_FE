@@ -37,6 +37,10 @@ Use separate origins for the two applications. The backend CORS allowlist must i
 
 Production outputs are `apps/user/dist` and `apps/admin/dist`. Set the hosting root to the appropriate app folder; hosting previously configured at the repository root must be updated. This migration does not deploy either application.
 
+## Admin integration
+
+Use the matching Java backend from `clean-admin-architecture`. The dashboard reads the authenticated principal and authorities from `/api/admin/console/session`. Admin system controls include the typed runtime status, catalog maintenance and a link to the backend Swagger UI. Review and confirm catalog changes in the dashboard.
+
 ## Verification and history
 
 The original admin history is retained. User import records the source commit using Git subtree metadata. CI runs each app's own tests and builds. Browser tests use intercepted fixture responses and do not certify production backend data. See each app's README and docs for its existing features and limitations.

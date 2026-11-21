@@ -16,7 +16,7 @@ import { dateTime } from '../shared/utils/format';
 import { OperationDrawer, type Operation } from '../features/operations/OperationDrawer';
 import { SessionGate } from '../shared/api/SessionGate';
 import { DataBrowser } from '../features/admin/DataBrowser';
-import { NativeApiPage } from '../features/admin/NativeApiPage';
+import { CatalogMaintenancePanel } from '../features/admin/CatalogMaintenancePanel';
 import { RuntimePage } from '../features/admin/RuntimePage';
 import { FinancialQualityPage } from '../features/data-quality/components/FinancialQualityPage';
 import { MarketDataAdminPage } from '../features/admin/MarketDataAdminPage';
@@ -171,8 +171,8 @@ function Dashboard() {
       {section === 'data' && <DataBrowser onRun={setRunId} onRaw={setRawId}/>}
 
       {section === 'system' && <>
-        <Tabs value={systemTab} onChange={setSystemTab} items={[['status', 'Trạng thái & độ phủ'], ['market', 'Dữ liệu thị trường'], ['api', 'API quản trị nâng cao']]}/>
-        {systemTab === 'status' ? <><RuntimePage onWorkflow={openWorkflow}/><SchedulePanel/></> : systemTab === 'market' ? <MarketDataAdminPage/> : <NativeApiPage/>}
+        <Tabs value={systemTab} onChange={setSystemTab} items={[['status', 'Trạng thái & độ phủ'], ['market', 'Dữ liệu thị trường'], ['api', 'Danh mục & tài liệu API']]}/>
+        {systemTab === 'status' ? <><RuntimePage onWorkflow={openWorkflow}/><SchedulePanel/></> : systemTab === 'market' ? <MarketDataAdminPage/> : <CatalogMaintenancePanel/>}
       </>}
     </div>
     <RunDrawer onRaw={id => { setRunId(null); setRawId(id); }} onIssue={value => { setRunId(null); setIssue(value); }} id={runId} onClose={() => setRunId(null)} onOperation={setOperation} onJob={id => { setRunId(null); openJobs(id); }} onSource={id => { setRunId(null); openSources(id); }} onQuality={id => { setRunId(null); openQuality(id, null, 'validation'); }}/>
