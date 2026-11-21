@@ -32,9 +32,6 @@ export function ActiveCommandsBanner({ onSelectCommand }: { onSelectCommand: (id
       void queryClient.invalidateQueries({ queryKey: ['admin-commands'] });
       void queryClient.invalidateQueries({ queryKey: ['admin-summary'] });
       void queryClient.invalidateQueries({ queryKey: ['active-admin-commands'] });
-      void queryClient.invalidateQueries({ queryKey: ['admin-local-ai-models'] });
-      void queryClient.invalidateQueries({ queryKey: ['local-ai-training-runs'] });
-      void queryClient.invalidateQueries({ queryKey: ['local-ai-readiness'] });
     }
     previousRunning.current = currentRunning;
   }, [active, queryClient]);
