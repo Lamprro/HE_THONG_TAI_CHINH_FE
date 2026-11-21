@@ -24,6 +24,7 @@ import { WorkflowPage, type WorkflowSelection } from '../features/admin/Workflow
 import { AiOperationsPage } from '../features/admin/AiOperationsPage';
 import { OperationsHistory } from '../features/admin/OperationsHistory';
 import { ActiveCommandsBanner } from '../features/admin/ActiveCommandsBanner';
+import { LineageTracerPage } from '../features/admin/LineageTracerPage';
 import { CommandTracker } from '../features/admin/CommandTracker';
 import { SchedulePanel } from '../features/admin/SchedulePanel';
 import { SystemSummary } from '../features/admin/SystemSummary';
@@ -55,7 +56,7 @@ function Dashboard() {
   const [workflow, setWorkflow] = useState<WorkflowSelection>({});
   const [historyKind, setHistoryKind] = useState<HistoryKind>('commands');
   const [jobsTab, setJobsTab] = useState<'jobs' | 'sources'>('jobs');
-  const [qualityTab, setQualityTab] = useState<'validation' | 'financial'>('validation');
+  const [qualityTab, setQualityTab] = useState<'validation' | 'financial' | 'lineage'>('validation');
   const [systemTab, setSystemTab] = useState<'status' | 'market' | 'api'>('status');
   const [dark, setDark] = useState(false);
   const [runId, setRunId] = useState<string | null>(null);
@@ -150,7 +151,7 @@ function Dashboard() {
       {section === 'scope' && <DataScopePage companies={scopeQueries.companies} securities={scopeQueries.securities}/>}
 
       {section === 'quality' && <>
-        <Tabs value={qualityTab} onChange={setQualityTab} items={[['validation', 'Kiểm tra & Vi phạm'], ['financial', 'Chất lượng BCTC & Công bố']]}/>
+        <Tabs value={qualityTab} onChange={setQualityTab} items={[['validation', 'Kiểm tra & Vi phạm'], ['financial', 'Chất lượng BCTC & Công bố'], ['lineage', 'Truy vết nguồn (Lineage)']]}/>
         {qualityTab === 'validation' ? (
           <>
             <div className="management-toolbar">
@@ -159,8 +160,10 @@ function Dashboard() {
             </div>
             <DataQualityPage key={`${qualityRun}-${qualityRaw}-${qualityView}`} initialTab={qualityView} rawFilter={qualityRaw} onRaw={setRawId} openIssues={issues} results={results} versions={versions} rules={q.rules} onSelect={setIssue} onRun={setRunId} runFilter={qualityRun} clearRunFilter={() => { setQualityRun(null); setQualityRaw(null); }}/>
           </>
-        ) : (
+        ) : qualityTab === 'financial' ? (
           <FinancialQualityPage />
+        ) : (
+          <LineageTracerPage onRun={setRunId} onRaw={setRawId}/>
         )}
       </>}
 

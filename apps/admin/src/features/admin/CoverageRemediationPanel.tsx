@@ -66,6 +66,18 @@ interface ExternalCapability {
   symbols?: string[];
 }
 
+interface GapResponse {
+  symbol: string;
+  type: string;
+  from: string;
+  to: string;
+  totalCalendarDays?: number;
+  presentDays?: number;
+  missingCount: number;
+  missingDates?: string[];
+  gaps?: Array<{ date?: string; reason: string }>;
+}
+
 export function CoverageRemediationPanel({ onWorkflow }: { onWorkflow?: (selection: WorkflowSelection) => void }) {
   const [search, setSearch] = useState('');
   const [filter, setFilter] = useState<'ALL' | 'GAP_PRICE' | 'GAP_STATEMENTS' | 'HEALTHY'>('ALL');
@@ -100,6 +112,13 @@ export function CoverageRemediationPanel({ onWorkflow }: { onWorkflow?: (selecti
     queryKey: ['external-capabilities'],
     queryFn: () => getJson<{ capabilities?: ExternalCapability[] }>(API_BASE, '/api/external-financial-data/capabilities').catch(() => ({ capabilities: [] })),
     staleTime: 300000,
+  });
+
+  const gapsQuery = useQuery({
+    queryKey: ['admin-symbol-gaps', selectedSymbol],
+    queryFn: () => getJson<GapResponse>(API_BASE, `/api/admin/financial-data/gaps?symbol=${selectedSymbol}&type=PRICE`),
+    enabled: !!selectedSymbol,
+    staleTime: 30000,
   });
 
   const statementProviders = useMemo(() => {
@@ -402,6 +421,48 @@ export function CoverageRemediationPanel({ onWorkflow }: { onWorkflow?: (selecti
                 <b>{selectedDetail.officialDocs} tài liệu</b>
               </div>
             </div>
+          </div>
+
+          <div className="detail-section">
+            <div className="eyebrow">PHÂN TÍCH KHOẢNG THIẾU TỪ BACKEND (LỊCH GIAO DỊCH CHUẨN)</div>
+            {gapsQuery.isFetching ? (
+              <p className="subtle">Đang đối chiếu lịch giao dịch sàn...</p>
+            ) : gapsQuery.data ? (
+              <div style={{ marginTop: '0.5rem' }}>
+                <div style={{ display: 'flex', gap: '1rem', marginBottom: '0.5rem', flexWrap: 'wrap' }}>
+                  <div>
+                    <span className="subtle" style={{ fontSize: '0.75rem' }}>Tổng phiên sàn: </span>
+                    <b>{gapsQuery.data.totalCalendarDays ?? '—'}</b>
+                  </div>
+                  <div>
+                    <span className="subtle" style={{ fontSize: '0.75rem' }}>Đã có canonical: </span>
+                    <b>{gapsQuery.data.presentDays ?? '—'}</b>
+                  </div>
+                  <div>
+                    <span className="subtle" style={{ fontSize: '0.75rem' }}>Số phiên thiếu: </span>
+                    <strong style={{ color: gapsQuery.data.missingCount > 0 ? 'var(--negative, #ef4444)' : 'var(--positive, #10b981)' }}>
+                      {gapsQuery.data.missingCount} phiên
+                    </strong>
+                  </div>
+                </div>
+                {gapsQuery.data.missingDates && gapsQuery.data.missingDates.length > 0 ? (
+                  <div>
+                    <span style={{ fontSize: '0.75rem', color: 'var(--negative, #ef4444)' }}>Các phiên thiếu theo lịch:</span>
+                    <div style={{ display: 'flex', gap: '0.35rem', flexWrap: 'wrap', marginTop: 4 }}>
+                      {gapsQuery.data.missingDates.map(d => (
+                        <Badge key={d} tone="red">{d}</Badge>
+                      ))}
+                    </div>
+                  </div>
+                ) : (
+                  <p className="subtle" style={{ color: 'var(--positive, #10b981)', margin: '0.25rem 0' }}>
+                    ✓ Không phát hiện phiên giao dịch nào bị thiếu so với lịch sàn VNINDEX.
+                  </p>
+                )}
+              </div>
+            ) : (
+              <p className="subtle">Chưa có dữ liệu phân tích khoảng thiếu.</p>
+            )}
           </div>
 
           <div className="detail-section">

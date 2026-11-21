@@ -38,37 +38,23 @@ export function ActiveCommandsBanner({ onSelectCommand }: { onSelectCommand: (id
   if (active.length === 0) return null;
 
   return (
-    <div
-      className="active-commands-banner"
-      style={{
-        background: 'linear-gradient(90deg, #1e1b4b 0%, #312e81 100%)',
-        border: '1px solid #4338ca',
-        color: '#e0e7ff',
-        padding: '0.5rem 1rem',
-        borderRadius: '6px',
-        display: 'flex',
-        alignItems: 'center',
-        justifyContent: 'space-between',
-        marginBottom: '0.75rem',
-        fontSize: '0.875rem',
-      }}
-    >
-      <div style={{ display: 'flex', alignItems: 'center', gap: '0.5rem' }}>
-        <Loader2 size={16} className="spinner" style={{ animation: 'spin 1s linear infinite' }} />
+    <div className="active-commands-banner">
+      <div className="active-commands-info">
+        <Loader2 size={15} className="spinner" style={{ animation: 'spin 1s linear infinite', flexShrink: 0 }} />
         <span>
           Đang chạy <b>{active.length}</b> tác vụ nền:{' '}
           {active.map(c => `${c.action || 'LỆNH'} (${c.status})`).join(', ')}
         </span>
       </div>
-      <div style={{ display: 'flex', gap: '0.5rem' }}>
+      <div className="active-commands-actions">
         {active.map(c => (
           <button
             key={String(c.id)}
             className="light-button"
-            style={{ padding: '0.2rem 0.6rem', fontSize: '0.8rem', background: '#3730a3', color: '#fff', border: 'none' }}
+            style={{ padding: '3px 8px', fontSize: '11px', background: '#3730a3', color: '#fff', border: 'none', whiteSpace: 'nowrap' }}
             onClick={() => onSelectCommand(String(c.id))}
           >
-            Theo dõi {String(c.action || c.id).slice(0, 15)} <ArrowRight size={12} style={{ display: 'inline' }} />
+            Theo dõi {String(c.action || c.id).slice(0, 12)} <ArrowRight size={11} style={{ display: 'inline' }} />
           </button>
         ))}
       </div>

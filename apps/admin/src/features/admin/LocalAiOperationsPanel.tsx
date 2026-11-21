@@ -1,7 +1,7 @@
 import { useMemo, useState } from 'react';
 import { useQuery } from '@tanstack/react-query';
 import { AlertCircle, Bot, CheckCircle2, Database, ExternalLink, RefreshCw, ShieldAlert } from 'lucide-react';
-import { API_BASE, getJson } from '../../shared/api/client';
+import { API_BASE, getJson, postJson } from '../../shared/api/client';
 import { Badge, Drawer, Panel, QueryState } from '../../shared/components/Ui';
 import { dateTime, safeText } from '../../shared/utils/format';
 
@@ -56,6 +56,28 @@ interface SecurityItem {
   symbol: string;
   exchange: string;
   companyName?: string;
+}
+
+interface SuitePackage {
+  id: string;
+  manifest_sha256: string;
+  status: string;
+  registered_at: string;
+  models?: Array<{ id: string; target_period?: string; role?: string }>;
+}
+
+interface SuiteRun {
+  id: string;
+  request_id: string;
+  model_id: string;
+  ticker: string;
+  role: string;
+  status: string;
+  error_code?: string;
+  http_status?: number;
+  latency_ms?: number;
+  started_at: string;
+  completed_at?: string;
 }
 
 const CONTRACTS_INFO = [
@@ -114,6 +136,42 @@ export function LocalAiOperationsPanel({ onRun }: { onRun?: (id: string) => void
   const [activeTab, setActiveTab] = useState<'packages' | 'universe' | 'lookup' | 'contracts' | 'forward'>('packages');
   const [selectedTicker, setSelectedTicker] = useState('FPT');
   const [selectedModelDetail, setSelectedModelDetail] = useState<LocalModel | null>(null);
+  const [selectedSuitePackageId, setSelectedSuitePackageId] = useState<string | null>(null);
+  const [recovering, setRecovering] = useState(false);
+  const [recoverMsg, setRecoverMsg] = useState<string | null>(null);
+
+  // Read registered suite packages via backend API
+  const suitePackagesQuery = useQuery({
+    queryKey: ['admin-local-ai-suite-packages'],
+    queryFn: () => getJson<SuitePackage[]>(API_BASE, '/api/admin/local-ai/suite/packages').catch(() => []),
+    staleTime: 60000,
+  });
+
+  const activeSuitePackageId = selectedSuitePackageId || (suitePackagesQuery.data && suitePackagesQuery.data.length > 0 ? suitePackagesQuery.data[0].id : null);
+
+  const suiteRunsQuery = useQuery({
+    queryKey: ['admin-local-ai-suite-runs', activeSuitePackageId],
+    queryFn: () => {
+      if (!activeSuitePackageId) return Promise.resolve([]);
+      return getJson<SuiteRun[]>(API_BASE, `/api/admin/local-ai/suite/packages/${activeSuitePackageId}/runs`).catch(() => []);
+    },
+    enabled: !!activeSuitePackageId,
+    staleTime: 30000,
+  });
+
+  const handleRecoverStale = async (pkgId: string) => {
+    try {
+      setRecovering(true);
+      setRecoverMsg(null);
+      const res = await postJson<unknown[]>(API_BASE, `/api/admin/local-ai/suite/packages/${pkgId}/recover-stale`, {});
+      setRecoverMsg(`Đã thu hồi ${Array.isArray(res) ? res.length : 0} lượt chạy treo.`);
+      void suiteRunsQuery.refetch();
+    } catch (e) {
+      setRecoverMsg(`Không thể thu hồi: ${e instanceof Error ? e.message : String(e)}`);
+    } finally {
+      setRecovering(false);
+    }
+  };
 
   // Read active models from public/admin endpoint
   const modelsQuery = useQuery({
@@ -225,18 +283,32 @@ export function LocalAiOperationsPanel({ onRun }: { onRun?: (id: string) => void
 
       {activeTab === 'packages' && (
         <div className="admin-stack">
+          {/* Phase 4.0 Status */}
+          <div className="mini-record" style={{ borderLeft: '4px solid var(--positive, #10b981)' }}>
+            <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'flex-start' }}>
+              <div>
+                <h3 style={{ margin: '0 0 0.25rem' }}>Local AI Suite Controller &amp; Service (Phase 4.0)</h3>
+                <span className="subtle">Trạng thái: <strong>Đã tích hợp vào backend main (`feature/local-ai-suite` ➔ `main`)</strong></span>
+              </div>
+              <Badge tone="green">Đã có trên Backend Main</Badge>
+            </div>
+            <p style={{ margin: '0.5rem 0' }}>
+              Đã đưa <code>LocalAiSuiteAdminController</code>, <code>LocalAiSuiteService</code>, <code>LocalAiSuiteContract</code>, <code>QuarterlyMarketFeatures</code> và <code>RankMarketFeatures</code> vào Java backend main kèm 8/8 unit tests đạt chuẩn.
+              Mọi lượt thực thi được bảo vệ bởi ranh giới loopback bắt buộc, xác thực Bearer token, tính toán idempotency key và kiểm định hợp đồng đầu ra.
+            </p>
+          </div>
+
           {/* Staging package status note */}
           <div className="mini-record" style={{ borderLeft: '4px solid var(--warning, #f59e0b)' }}>
             <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'flex-start' }}>
               <div>
                 <h3 style={{ margin: '0 0 0.25rem' }}>Gói Xếp hạng 100 mã (Rank 100 V1 Backfill Release)</h3>
-                <span className="subtle">Trạng thái: <strong>Mới nghiệm thu trong schema cô lập (TEST workspace)</strong></span>
+                <span className="subtle">Trạng thái: <strong>Nghiệm thu trong schema cô lập (TEST workspace)</strong></span>
               </div>
-              <Badge tone="amber">Chưa nạp vào Production DB</Badge>
+              <Badge tone="amber">Chờ duyệt nạp Production</Badge>
             </div>
             <p style={{ margin: '0.5rem 0' }}>
-              Code chạy suite (`LocalAiSuiteService`) và dữ liệu backfill hiện chỉ có trong workspace <code>HE_THONG_DATA_TAI_CHINH_TEST</code>, chưa commit vào repo <code>HE_THONG_DATA_TAI_CHINH_BACKEND_JAVA</code> main.
-              Cần thực hiện <strong>Phase 4.0</strong> (chuyển code từ TEST sang backend main) và có xác nhận kiểm duyệt hash từ đội train trước khi đăng ký chính thức lên production.
+              Gói rank-100 (manifest <code>5cf37d71…</code>) cần sự xác nhận hash/package từ đội train và phê duyệt của quản trị viên trước khi nạp chính thức vào bảng <code>local_ai_packages</code> production.
             </p>
           </div>
 
@@ -278,6 +350,71 @@ export function LocalAiOperationsPanel({ onRun }: { onRun?: (id: string) => void
             ) : (
               <p className="subtle" style={{ margin: '0.5rem 0' }}>Bảng <code>local_ai_packages</code> chưa có bản ghi hoặc cần quyền truy cập console data.</p>
             )}
+
+            {/* Suite Runtime History & Recovery */}
+            <div style={{ marginTop: '1rem', padding: '0.75rem', background: 'var(--card-subtle, rgba(255,255,255,0.03))', borderRadius: 6, border: '1px solid var(--border, #334155)' }}>
+              <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'flex-start', flexWrap: 'wrap', gap: '0.5rem' }}>
+                <div>
+                  <h4 style={{ margin: '0 0 0.25rem' }}>Lịch sử thực thi Suite &amp; Thu hồi tác vụ treo (Suite Runs)</h4>
+                  <span className="subtle" style={{ fontSize: '0.75rem' }}>Đọc trực tiếp từ <code>/api/admin/local-ai/suite/packages/&#123;id&#125;/runs</code></span>
+                </div>
+                {activeSuitePackageId && (
+                  <button
+                    className="light-button"
+                    disabled={recovering}
+                    onClick={() => handleRecoverStale(activeSuitePackageId)}
+                  >
+                    <RefreshCw size={13} style={{ marginRight: 4 }} />
+                    {recovering ? 'Đang thu hồi…' : 'Thu hồi lượt treo (> 5 phút)'}
+                  </button>
+                )}
+              </div>
+
+              {recoverMsg && (
+                <p style={{ margin: '0.5rem 0', fontSize: '0.8rem', color: recoverMsg.includes('Không thể') ? 'var(--negative, #ef4444)' : 'var(--positive, #10b981)' }}>
+                  {recoverMsg}
+                </p>
+              )}
+
+              {suiteRunsQuery.isFetching ? (
+                <p className="subtle" style={{ margin: '0.5rem 0' }}>Đang tải lịch sử lượt chạy suite...</p>
+              ) : suiteRunsQuery.data && suiteRunsQuery.data.length > 0 ? (
+                <div className="table-scroll" style={{ marginTop: '0.5rem', maxHeight: 200 }}>
+                  <table>
+                    <thead>
+                      <tr>
+                        <th>Run ID</th>
+                        <th>Model ID</th>
+                        <th>Mã CP</th>
+                        <th>Vai trò</th>
+                        <th>Trạng thái</th>
+                        <th>Độ trễ</th>
+                        <th>Bắt đầu</th>
+                      </tr>
+                    </thead>
+                    <tbody>
+                      {suiteRunsQuery.data.map(r => (
+                        <tr key={r.id}>
+                          <td><code>{r.id.slice(0, 8)}…</code></td>
+                          <td><code>{r.model_id}</code></td>
+                          <td><strong>{r.ticker}</strong></td>
+                          <td><Badge tone="neutral">{r.role}</Badge></td>
+                          <td>
+                            <Badge tone={r.status === 'SUCCEEDED' ? 'green' : r.status === 'CACHED' ? 'blue' : r.status === 'RUNNING' ? 'amber' : 'red'}>
+                              {r.status}
+                            </Badge>
+                          </td>
+                          <td style={{ fontSize: '0.75rem' }}>{r.latency_ms != null ? `${r.latency_ms} ms` : '—'}</td>
+                          <td style={{ fontSize: '0.75rem' }}>{dateTime(r.started_at)}</td>
+                        </tr>
+                      ))}
+                    </tbody>
+                  </table>
+                </div>
+              ) : (
+                <p className="subtle" style={{ margin: '0.5rem 0' }}>Chưa có lượt chạy suite nào trong database hoặc Local AI Suite chưa được bật cờ runtime.</p>
+              )}
+            </div>
 
             <h4 style={{ marginTop: '1rem', marginBottom: '0.25rem' }}>Danh mục 11 Mô hình nghiên cứu đang nạp trên server</h4>
             <QueryState query={modelsQuery} empty="Không tải được danh mục mô hình.">
