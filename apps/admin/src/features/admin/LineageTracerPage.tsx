@@ -45,12 +45,24 @@ export function LineageTracerPage({
   // 2. Step 1: Recent Ingestion Runs for symbol/operation
   const runsQuery = useQuery({
     queryKey: ['lineage-runs', symbol, selectedDataset],
-    queryFn: () => {
-      const opFilter = selectedDataset === 'PRICE' ? 'PRICE' : 'FINANCIAL';
-      return getJson<PageResponse>(
+    queryFn: async () => {
+      const res = await getJson<PageResponse>(
         API_BASE,
-        `/api/admin/console/data/ingestion_runs?search=${encodeURIComponent(symbol)}&size=10`
-      ).catch(() => ({ rows: [], total: 0, page: 0, size: 10 }));
+        `/api/admin/console/data/ingestion_runs?search=${encodeURIComponent(symbol)}&size=30`
+      ).catch(() => ({ rows: [], total: 0, page: 0, size: 30 }));
+
+      const opPattern = selectedDataset === 'PRICE' ? /price|market|history/i : /financial|disclosure|statement/i;
+      const filtered = (res.rows || []).filter(r => {
+        const url = String(r.request_url || '');
+        const op = String(r.operation || '');
+        return opPattern.test(url) || opPattern.test(op);
+      });
+      return {
+        rows: filtered.length > 0 ? filtered : res.rows,
+        total: filtered.length > 0 ? filtered.length : res.total,
+        page: res.page,
+        size: res.size,
+      };
     },
     staleTime: 30000,
   });
@@ -79,7 +91,7 @@ export function LineageTracerPage({
   const validationQuery = useQuery({
     queryKey: ['lineage-validations', activeRawId],
     queryFn: () => {
-      if (!activeRawId) return Promise.resolve({ rows: [], total: 0, page: 0, size: 10 });
+      if (!activeRawId) return Promise.resolve({ rows: [], total: 0, page: 20, size: 20 });
       return getJson<PageResponse>(
         API_BASE,
         `/api/admin/console/data/validation_results?raw_payload_id=${encodeURIComponent(activeRawId)}&size=20`
@@ -89,30 +101,38 @@ export function LineageTracerPage({
     staleTime: 30000,
   });
 
-  // 5. Step 4: Data Versions for active raw payload
+  // 5. Step 4: Data Versions for active run (filtered by runId)
   const versionsQuery = useQuery({
-    queryKey: ['lineage-versions', activeRawId],
+    queryKey: ['lineage-versions', activeRunId],
     queryFn: () => {
-      if (!activeRawId) return Promise.resolve({ rows: [], total: 0, page: 0, size: 10 });
+      if (!activeRunId) return Promise.resolve({ rows: [], total: 0, page: 0, size: 10 });
       return getJson<PageResponse>(
         API_BASE,
-        `/api/admin/console/data/data_versions?raw_payload_id=${encodeURIComponent(activeRawId)}&size=10`
+        `/api/admin/console/data/data_versions?runId=${encodeURIComponent(activeRunId)}&size=10`
       ).catch(() => ({ rows: [], total: 0, page: 0, size: 10 }));
     },
-    enabled: !!activeRawId,
+    enabled: !!activeRunId,
     staleTime: 30000,
   });
 
+  const activeVersionId = versionsQuery.data?.rows?.[0]?.id;
+
   // 6. Step 5: Canonical Output Rows
   const canonicalQuery = useQuery({
-    queryKey: ['lineage-canonical', currentSecurity?.id, selectedDataset],
+    queryKey: ['lineage-canonical', currentSecurity?.id, selectedDataset, activeVersionId],
     queryFn: () => {
       if (!currentSecurity?.id) return Promise.resolve({ rows: [], total: 0, page: 0, size: 10 });
       const table = selectedDataset === 'PRICE' ? 'market_prices' : 'financial_statements';
+      const versionFilter = activeVersionId ? `&data_version_id=${encodeURIComponent(String(activeVersionId))}` : '';
       return getJson<PageResponse>(
         API_BASE,
-        `/api/admin/console/data/${table}?security_id=${encodeURIComponent(currentSecurity.id)}&is_canonical=true&size=10`
-      ).catch(() => ({ rows: [], total: 0, page: 0, size: 10 }));
+        `/api/admin/console/data/${table}?security_id=${encodeURIComponent(currentSecurity.id)}&is_canonical=true${versionFilter}&size=10`
+      ).catch(async () => {
+        return getJson<PageResponse>(
+          API_BASE,
+          `/api/admin/console/data/${table}?security_id=${encodeURIComponent(currentSecurity.id)}&is_canonical=true&size=10`
+        ).catch(() => ({ rows: [], total: 0, page: 0, size: 10 }));
+      });
     },
     enabled: !!currentSecurity?.id,
     staleTime: 30000,
@@ -247,7 +267,7 @@ export function LineageTracerPage({
                         >
                           <td><code>{idStr.slice(0, 8)}…</code></td>
                           <td>
-                            <Badge tone={r.status === 'COMPLETED' ? 'green' : r.status === 'RUNNING' ? 'amber' : 'red'}>
+                            <Badge tone={r.status === 'SUCCESS' || r.status === 'COMPLETED' ? 'green' : r.status === 'RUNNING' || r.status === 'STARTED' ? 'amber' : 'red'}>
                               {toStr(r.status)}
                             </Badge>
                           </td>

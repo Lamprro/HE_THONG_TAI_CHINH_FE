@@ -10,13 +10,12 @@ export function ActiveCommandsBanner({ onSelectCommand }: { onSelectCommand: (id
 
   const query = useQuery({
     queryKey: ['active-admin-commands'],
-    queryFn: () => getJson<{ rows: Row[]; total: number }>(API_BASE, '/api/admin/console/data/admin_commands?page=0&size=10'),
+    queryFn: () => getJson<{ rows: Row[]; total: number }>(API_BASE, '/api/admin/console/data/admin_commands?status=QUEUED,RUNNING&size=20'),
     refetchInterval: 3000,
     staleTime: 2000,
   });
 
-  const rows = query.data?.rows || [];
-  const active = rows.filter(r => r.status === 'RUNNING' || r.status === 'QUEUED');
+  const active = query.data?.rows || [];
 
   useEffect(() => {
     const currentRunning = new Set(active.map(r => String(r.id)));
@@ -29,8 +28,13 @@ export function ActiveCommandsBanner({ onSelectCommand }: { onSelectCommand: (id
       }
     }
     if (hasFinished) {
-      // Auto-invalidate active queries to refresh view
-      void queryClient.invalidateQueries({ type: 'active' });
+      // Invalidate specific resource queries instead of wiping entire client cache
+      void queryClient.invalidateQueries({ queryKey: ['admin-commands'] });
+      void queryClient.invalidateQueries({ queryKey: ['admin-summary'] });
+      void queryClient.invalidateQueries({ queryKey: ['active-admin-commands'] });
+      void queryClient.invalidateQueries({ queryKey: ['admin-local-ai-models'] });
+      void queryClient.invalidateQueries({ queryKey: ['local-ai-training-runs'] });
+      void queryClient.invalidateQueries({ queryKey: ['local-ai-readiness'] });
     }
     previousRunning.current = currentRunning;
   }, [active, queryClient]);

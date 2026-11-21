@@ -4,18 +4,51 @@ import { formatKey } from './structured-keys';
 
 export { formatKey };
 
-export function StructuredView({ data }: { data: Record<string, unknown> }): ReactNode {
+const IGNORED_KEYS = new Set([
+  'raw_id', 'source_raw_id', 'record_sha256', 'source_sha256',
+  'schema_version', 'manifest_sha256', 'evidence_sha256',
+]);
+
+export function StructuredView({
+  data,
+  depth = 0,
+  maxDepth = 3,
+}: {
+  data: Record<string, unknown>;
+  depth?: number;
+  maxDepth?: number;
+}): ReactNode {
+  if (depth > maxDepth) {
+    return <code className="subtle" style={{ fontSize: '0.8rem' }}>{JSON.stringify(data).slice(0, 100)}…</code>;
+  }
+
   const primitives: [string, unknown][] = [];
   const complex: [string, unknown][] = [];
 
   for (const [k, v] of Object.entries(data)) {
     if (v === null || v === undefined) continue;
+    if (IGNORED_KEYS.has(k)) continue;
     if (typeof v === 'object') {
       complex.push([k, v]);
     } else {
       primitives.push([k, v]);
     }
   }
+
+  const formatPrimitiveValue = (val: unknown): string => {
+    if (typeof val === 'boolean') return val ? 'Có' : 'Không';
+    if (typeof val === 'string') {
+      // If it looks like a SHA-256 hex hash
+      if (/^[a-f0-9]{64}$/i.test(val)) {
+        return `SHA: ${val.slice(0, 8)}…`;
+      }
+      // If it looks like a UUID
+      if (/^[0-9a-f]{8}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{12}$/i.test(val)) {
+        return `${val.slice(0, 8)}…`;
+      }
+    }
+    return text(val);
+  };
 
   return (
     <div className="structured-view" style={{ display: 'flex', flexDirection: 'column', gap: '0.75rem' }}>
@@ -24,7 +57,7 @@ export function StructuredView({ data }: { data: Record<string, unknown> }): Rea
           {primitives.map(([k, v]) => (
             <div key={k}>
               <dt>{formatKey(k)}</dt>
-              <dd>{text(typeof v === 'boolean' ? (v ? 'Có' : 'Không') : v)}</dd>
+              <dd>{formatPrimitiveValue(v)}</dd>
             </div>
           ))}
         </dl>
@@ -37,17 +70,17 @@ export function StructuredView({ data }: { data: Record<string, unknown> }): Rea
               {v.map((item, idx) => (
                 <li key={idx} style={{ marginBottom: '0.25rem' }}>
                   {typeof item === 'object' && item !== null ? (
-                    <StructuredView data={item as Record<string, unknown>} />
+                    <StructuredView data={item as Record<string, unknown>} depth={depth + 1} maxDepth={maxDepth} />
                   ) : (
-                    text(item)
+                    formatPrimitiveValue(item)
                   )}
                 </li>
               ))}
             </ul>
           ) : typeof v === 'object' && v !== null ? (
-            <StructuredView data={v as Record<string, unknown>} />
+            <StructuredView data={v as Record<string, unknown>} depth={depth + 1} maxDepth={maxDepth} />
           ) : (
-            <p style={{ margin: 0, fontSize: '0.9rem' }}>{text(v)}</p>
+            <p style={{ margin: 0, fontSize: '0.9rem' }}>{formatPrimitiveValue(v)}</p>
           )}
         </div>
       ))}

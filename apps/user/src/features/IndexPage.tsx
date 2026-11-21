@@ -26,7 +26,22 @@ export function IndexPage({ code }: { code: string }) {
   const live = useLiveIndices();
   const value = live.data?.find(row => row.code === code);
   const candles = useCandles(info?.chart || '', range);
-  const membersQuery = useQuery({ queryKey: ['index-members', code], enabled: Boolean(info), staleTime: 3_600_000, queryFn: ({ signal }) => apiPage<IndexMember>('indexMembers', [code], { size: 100 }, signal) });
+  const membersQuery = useQuery({
+    queryKey: ['index-members', code],
+    enabled: Boolean(info),
+    staleTime: 3_600_000,
+    queryFn: async ({ signal }) => {
+      let page = 0;
+      let allItems: IndexMember[] = [];
+      while (page < 5) {
+        const res = await apiPage<IndexMember>('indexMembers', [code], { size: 200, page }, signal);
+        allItems = allItems.concat(res.items || []);
+        if (!res.hasNext || !res.items || res.items.length < 200) break;
+        page++;
+      }
+      return { items: allItems, total: allItems.length, page: 0, size: allItems.length, totalPages: 1, hasNext: false };
+    },
+  });
   const basket = useBasket(info ? info.basket : null);
   const market = useMarket('');
   const tracked = useMemo(() => new Map((market.data?.data.securities || []).map(row => [row.symbol, row])), [market.data]);

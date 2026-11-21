@@ -73,7 +73,31 @@ export function MarketDataAdminPage() {
   const [pricePage, setPricePage] = useState(0);
   const [actionMessage, setActionMessage] = useState<string | null>(null);
 
+  // Seed confirmation modals
+  const [showSeedIndicesModal, setShowSeedIndicesModal] = useState(false);
+  const [seedIndicesReason, setSeedIndicesReason] = useState('Khởi tạo catalog job chỉ số thị trường');
+  const [showSeedMacroModal, setShowSeedMacroModal] = useState(false);
+  const [seedMacroReason, setSeedMacroReason] = useState('Khởi tạo danh mục macro jobs');
+
   const queryClient = useQueryClient();
+
+  // Securities lookup map to resolve UUID to ticker symbol
+  const securitiesMapQuery = useQuery({
+    queryKey: ['admin-securities-map-market-data'],
+    queryFn: async () => {
+      const res = await getJson<{ rows?: Array<{ id: string; symbol: string; exchange: string }>; items?: Array<{ id: string; symbol: string; exchange: string }> }>(
+        API_BASE,
+        '/api/admin/console/data/securities?page=0&size=500'
+      ).catch(() => null);
+      const rows = res?.rows || res?.items || [];
+      const map: Record<string, string> = {};
+      rows.forEach(s => {
+        if (s.id && s.symbol) map[s.id] = s.symbol;
+      });
+      return map;
+    },
+    staleTime: 5 * 60 * 1000,
+  });
 
   // Queries
   const indicesQuery = useQuery({
@@ -188,7 +212,7 @@ export function MarketDataAdminPage() {
                 <button
                   className="primary-button"
                   disabled={seedIndicesMutation.isPending}
-                  onClick={() => seedIndicesMutation.mutate()}
+                  onClick={() => setShowSeedIndicesModal(true)}
                 >
                   <Layers size={14} style={{ marginRight: 4 }} />
                   {seedIndicesMutation.isPending ? 'Đang khởi tạo…' : 'Khởi tạo Index Jobs'}
@@ -196,7 +220,7 @@ export function MarketDataAdminPage() {
                 <button
                   className="light-button"
                   disabled={seedMacroMutation.isPending}
-                  onClick={() => seedMacroMutation.mutate()}
+                  onClick={() => setShowSeedMacroModal(true)}
                 >
                   <Database size={14} style={{ marginRight: 4 }} />
                   {seedMacroMutation.isPending ? 'Đang khởi tạo…' : 'Khởi tạo Macro Jobs'}
@@ -242,7 +266,11 @@ export function MarketDataAdminPage() {
               <div className="admin-stack" style={{ marginTop: '1.5rem', background: 'var(--panel-alt, #f8fafc)', padding: '1rem', borderRadius: 4, border: '1px solid var(--border, #e2e8f0)' }}>
                 <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center' }}>
                   <h4>Giá đóng cửa &amp; Thành phần rổ chỉ số: <strong>{selectedIndexCode}</strong></h4>
-                  <Badge tone="green">CANONICAL ACTIVATED</Badge>
+                  {indexPricesQuery.data?.content && indexPricesQuery.data.content.length > 0 ? (
+                    <Badge tone="green">{indexPricesQuery.data.content.length} PHIÊN CANONICAL</Badge>
+                  ) : (
+                    <Badge tone="amber">CHƯA CÓ GIÁ CANONICAL</Badge>
+                  )}
                 </div>
 
                 <div style={{ display: 'grid', gridTemplateColumns: '1fr 1fr', gap: '1rem', marginTop: '0.5rem' }}>
@@ -260,13 +288,18 @@ export function MarketDataAdminPage() {
                             </tr>
                           </thead>
                           <tbody>
-                            {(indexPricesQuery.data?.content || []).map((p, i) => (
-                              <tr key={p.id || i}>
-                                <td>{safeText(p.tradingDate || p.trading_date)}</td>
-                                <td className="number" style={{ fontWeight: 600 }}>{Number(p.closePrice || 0).toLocaleString('vi-VN')}</td>
-                                <td className="number">{Number(p.volume || 0).toLocaleString('vi-VN')}</td>
-                              </tr>
-                            ))}
+                            {(indexPricesQuery.data?.content || []).map((p, i) => {
+                              const dateVal = p.tradingDate || p.trading_date || (p as any).priceTimestamp || (p as any).price_timestamp;
+                              const closeVal = p.closePrice ?? (p as any).closeValue ?? (p as any).close_price ?? (p as any).close_value ?? 0;
+                              const volVal = p.volume ?? (p as any).volume ?? 0;
+                              return (
+                                <tr key={p.id || i}>
+                                  <td>{dateVal ? dateTime(dateVal).split(' ')[0] : '—'}</td>
+                                  <td className="number" style={{ fontWeight: 600 }}>{Number(closeVal).toLocaleString('vi-VN')}</td>
+                                  <td className="number">{Number(volVal).toLocaleString('vi-VN')}</td>
+                                </tr>
+                              );
+                            })}
                           </tbody>
                         </table>
                       </div>
@@ -287,13 +320,21 @@ export function MarketDataAdminPage() {
                             </tr>
                           </thead>
                           <tbody>
-                            {(indexMembersQuery.data?.content || []).map((m, i) => (
-                              <tr key={m.id || i}>
-                                <td><strong>{m.symbol || safeText(m.securityId)}</strong></td>
-                                <td className="number">{m.weight ? `${Number(m.weight).toFixed(2)}%` : '—'}</td>
-                                <td><small>{safeText(m.effectiveDate || m.effective_date)}</small></td>
-                              </tr>
-                            ))}
+                            {(indexMembersQuery.data?.content || []).map((m, i) => {
+                              const secId = m.securityId || (m as any).security_id || '';
+                              const sym = m.symbol || securitiesMapQuery.data?.[secId] || (secId ? `${secId.slice(0, 8)}…` : '—');
+                              const effDate = m.effectiveDate || m.effective_date || (m as any).effectiveFrom || (m as any).effective_from;
+                              return (
+                                <tr key={m.id || i}>
+                                  <td>
+                                    <strong>{sym}</strong>
+                                    {secId && sym !== secId ? <code className="subtle" style={{ fontSize: '0.7rem', marginLeft: 4 }}>({secId.slice(0, 8)}…)</code> : null}
+                                  </td>
+                                  <td className="number">{m.weight ? `${Number(m.weight).toFixed(2)}%` : '—'}</td>
+                                  <td><small>{safeText(effDate)}</small></td>
+                                </tr>
+                              );
+                            })}
                           </tbody>
                         </table>
                       </div>
@@ -404,6 +445,84 @@ export function MarketDataAdminPage() {
           </div>
         )}
       </Panel>
+
+      {/* Modal Seed Indices Jobs */}
+      {showSeedIndicesModal && (
+        <Drawer
+          title="Khởi tạo Index Ingestion Jobs"
+          subtitle="Tạo hoặc cập nhật các job thu thập dữ liệu chỉ số thị trường"
+          onClose={() => setShowSeedIndicesModal(false)}
+        >
+          <div className="detail-section">
+            <p>
+              Thao tác này sẽ quét danh mục chỉ số (VNINDEX, VN30, HNX-INDEX...) và đăng ký/cập nhật các job định kỳ trong hệ thống.
+            </p>
+            <div style={{ marginBottom: '1rem' }}>
+              <label style={{ display: 'block', fontSize: '0.85rem', marginBottom: 3 }}>Lý do thực hiện (Audit reason)</label>
+              <input
+                type="text"
+                value={seedIndicesReason}
+                onChange={e => setSeedIndicesReason(e.target.value)}
+                style={{ width: '100%' }}
+              />
+            </div>
+            <div className="toolbar" style={{ display: 'flex', gap: '0.5rem' }}>
+              <button
+                className="primary-button"
+                disabled={seedIndicesMutation.isPending || !seedIndicesReason.trim()}
+                onClick={() => {
+                  seedIndicesMutation.mutate();
+                  setShowSeedIndicesModal(false);
+                }}
+              >
+                {seedIndicesMutation.isPending ? 'Đang khởi tạo…' : 'Xác nhận khởi tạo'}
+              </button>
+              <button className="light-button" onClick={() => setShowSeedIndicesModal(false)}>
+                Hủy
+              </button>
+            </div>
+          </div>
+        </Drawer>
+      )}
+
+      {/* Modal Seed Macro Jobs */}
+      {showSeedMacroModal && (
+        <Drawer
+          title="Khởi tạo Macro Ingestion Jobs"
+          subtitle="Tạo hoặc cập nhật các job thu thập dữ liệu vĩ mô (GDP, CPI, Lãi suất)"
+          onClose={() => setShowSeedMacroModal(false)}
+        >
+          <div className="detail-section">
+            <p>
+              Thao tác này sẽ đồng bộ cấu hình macro series vào bảng quản trị và kích hoạt pipeline vĩ mô.
+            </p>
+            <div style={{ marginBottom: '1rem' }}>
+              <label style={{ display: 'block', fontSize: '0.85rem', marginBottom: 3 }}>Lý do thực hiện (Audit reason)</label>
+              <input
+                type="text"
+                value={seedMacroReason}
+                onChange={e => setSeedMacroReason(e.target.value)}
+                style={{ width: '100%' }}
+              />
+            </div>
+            <div className="toolbar" style={{ display: 'flex', gap: '0.5rem' }}>
+              <button
+                className="primary-button"
+                disabled={seedMacroMutation.isPending || !seedMacroReason.trim()}
+                onClick={() => {
+                  seedMacroMutation.mutate();
+                  setShowSeedMacroModal(false);
+                }}
+              >
+                {seedMacroMutation.isPending ? 'Đang khởi tạo…' : 'Xác nhận khởi tạo'}
+              </button>
+              <button className="light-button" onClick={() => setShowSeedMacroModal(false)}>
+                Hủy
+              </button>
+            </div>
+          </div>
+        </Drawer>
+      )}
     </div>
   );
 }

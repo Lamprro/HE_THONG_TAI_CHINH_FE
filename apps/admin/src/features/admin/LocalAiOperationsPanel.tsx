@@ -232,12 +232,20 @@ export function LocalAiOperationsPanel({ onRun }: { onRun?: (id: string) => void
     staleTime: 30000,
   });
 
+  // Recover modal state
+  const [showRecoverModal, setShowRecoverModal] = useState(false);
+  const [recoverPkgId, setRecoverPkgId] = useState<string | null>(null);
+  const [recoverReason, setRecoverReason] = useState('Thu hồi các lượt chạy suite bị treo timeout');
+
   const handleRecoverStale = async (pkgId: string) => {
     try {
       setRecovering(true);
       setRecoverMsg(null);
-      const res = await postJson<unknown[]>(API_BASE, `/api/admin/local-ai/suite/packages/${pkgId}/recover-stale`, {});
+      const res = await postJson<unknown[]>(API_BASE, `/api/admin/local-ai/suite/packages/${pkgId}/recover-stale`, {
+        reason: recoverReason,
+      });
       setRecoverMsg(`Đã thu hồi ${Array.isArray(res) ? res.length : 0} lượt chạy treo.`);
+      setShowRecoverModal(false);
       void suiteRunsQuery.refetch();
     } catch (e) {
       setRecoverMsg(`Không thể thu hồi: ${e instanceof Error ? e.message : String(e)}`);
@@ -248,15 +256,15 @@ export function LocalAiOperationsPanel({ onRun }: { onRun?: (id: string) => void
 
   // Read active models from public/admin endpoint
   const modelsQuery = useQuery({
-    queryKey: ['admin-local-ai-models'],
-    queryFn: () => getJson<ModelsPageResponse>(API_BASE, '/api/v1/local-ai/models?size=100'),
+    queryKey: ['admin-local-ai-models', activeSuitePackageId],
+    queryFn: () => getJson<ModelsPageResponse>(API_BASE, `/api/v1/local-ai/models?size=100${activeSuitePackageId ? `&packageId=${encodeURIComponent(activeSuitePackageId)}` : ''}`),
     staleTime: 60000,
   });
 
   // Read packages from console dataset
   const packagesQuery = useQuery({
     queryKey: ['admin-console-packages'],
-    queryFn: () => getJson<{ items: PackageRecord[] }>(API_BASE, '/api/admin/console/data/local_ai_packages').catch(() => ({ items: [] })),
+    queryFn: () => getJson<{ rows?: PackageRecord[]; items?: PackageRecord[] }>(API_BASE, '/api/admin/console/data/local_ai_packages').then(res => res?.rows || res?.items || []).catch(() => []),
     staleTime: 60000,
   });
 
@@ -385,7 +393,7 @@ export function LocalAiOperationsPanel({ onRun }: { onRun?: (id: string) => void
   };
 
   const models = modelsQuery.data?.items || [];
-  const packages = packagesQuery.data?.items || [];
+  const packages: PackageRecord[] = Array.isArray(packagesQuery.data) ? packagesQuery.data : (packagesQuery.data as any)?.rows || (packagesQuery.data as any)?.items || [];
   const tickers = securitiesQuery.data?.items?.map(s => s.symbol) || ['FPT', 'HPG', 'VNM', 'ACB', 'TCB', 'MWG', 'MSN', 'MBB', 'SSI', 'VHM'];
 
   return (
@@ -699,22 +707,25 @@ export function LocalAiOperationsPanel({ onRun }: { onRun?: (id: string) => void
               <Badge tone="green">Đã có trên Backend Main</Badge>
             </div>
             <p style={{ margin: '0.5rem 0' }}>
-              Đã đưa <code>LocalAiSuiteAdminController</code>, <code>LocalAiSuiteService</code>, <code>LocalAiSuiteContract</code>, <code>QuarterlyMarketFeatures</code> và <code>RankMarketFeatures</code> vào Java backend main kèm 8/8 unit tests đạt chuẩn.
+              Đã đưa <code>LocalAiSuiteAdminController</code>, <code>LocalAiSuiteService</code>, <code>LocalAiSuiteContract</code>, <code>QuarterlyMarketFeatures</code> và <code>RankMarketFeatures</code> vào Java backend main.
               Mọi lượt thực thi được bảo vệ bởi ranh giới loopback bắt buộc, xác thực Bearer token, tính toán idempotency key và kiểm định hợp đồng đầu ra.
             </p>
           </div>
 
           {/* Staging package status note */}
-          <div className="mini-record" style={{ borderLeft: '4px solid var(--warning, #f59e0b)' }}>
+          <div className="mini-record" style={{ borderLeft: '4px solid var(--accent, #3b82f6)' }}>
             <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'flex-start' }}>
               <div>
-                <h3 style={{ margin: '0 0 0.25rem' }}>Gói Xếp hạng 100 mã (Rank 100 V1 Backfill Release)</h3>
-                <span className="subtle">Trạng thái: <strong>Nghiệm thu trong schema cô lập (TEST workspace)</strong></span>
+                <h3 style={{ margin: '0 0 0.25rem' }}>Quy trình Phát hành &amp; Vận hành Gói Mô hình</h3>
+                <span className="subtle">Quản trị vòng đời: <strong>Huấn luyện ➔ Nghiệm thu cô lập ➔ Phát hành ACTIVE ➔ Rollback</strong></span>
               </div>
-              <Badge tone="amber">Chờ duyệt nạp Production</Badge>
+              <Badge tone={packages.some(p => p.status === 'ACTIVE') ? 'green' : 'amber'}>
+                {packages.some(p => p.status === 'ACTIVE') ? 'ĐÃ CÓ GÓI ACTIVE' : 'CHỜ PHÁT HÀNH'}
+              </Badge>
             </div>
             <p style={{ margin: '0.5rem 0' }}>
-              Gói rank-100 (manifest <code>5cf37d71…</code>) cần sự xác nhận hash/package từ đội train và phê duyệt của quản trị viên trước khi nạp chính thức vào bảng <code>local_ai_packages</code> production.
+              Gói mô hình sau khi huấn luyện đạt cổng chất lượng (Dev &amp; Retro Gates) sẽ được quản trị viên duyệt và phát hành vào bảng <code>local_ai_packages</code> với trạng thái <code>ACTIVE</code>.
+              Chỉ 1 gói duy nhất giữ vai trò ACTIVE phục vụ công khai; các gói trước tự động chuyển sang <code>SUPERSEDED</code> và hỗ trợ rollback nhanh.
             </p>
           </div>
 
@@ -746,7 +757,7 @@ export function LocalAiOperationsPanel({ onRun }: { onRun?: (id: string) => void
                         <td><code>{String(p.id).slice(0, 16)}…</code></td>
                         <td>{safeText(String(p.package_name || p.name || 'Gói mô hình'))}</td>
                         <td>{safeText(String(p.version || '1.0'))}</td>
-                        <td><Badge tone="neutral">{safeText(String(p.status || 'ACTIVE'))}</Badge></td>
+                        <td><Badge tone={p.status === 'ACTIVE' ? 'green' : p.status === 'SUPERSEDED' ? 'neutral' : 'amber'}>{safeText(String(p.status || 'ACTIVE'))}</Badge></td>
                         <td>{dateTime(typeof p.registered_at === 'string' ? p.registered_at : typeof p.created_at === 'string' ? p.created_at : null)}</td>
                       </tr>
                     ))}
@@ -768,7 +779,10 @@ export function LocalAiOperationsPanel({ onRun }: { onRun?: (id: string) => void
                   <button
                     className="light-button"
                     disabled={recovering}
-                    onClick={() => handleRecoverStale(activeSuitePackageId)}
+                    onClick={() => {
+                      setRecoverPkgId(activeSuitePackageId);
+                      setShowRecoverModal(true);
+                    }}
                   >
                     <RefreshCw size={13} style={{ marginRight: 4 }} />
                     {recovering ? 'Đang thu hồi…' : 'Thu hồi lượt treo (> 5 phút)'}
@@ -1235,6 +1249,41 @@ export function LocalAiOperationsPanel({ onRun }: { onRun?: (id: string) => void
             <p style={{ marginTop: '0.5rem' }}>
               <strong>Ghi chú:</strong> {selectedModelDetail.outputContract?.note || 'Mô hình nghiên cứu nội bộ.'}
             </p>
+          </div>
+        </Drawer>
+      )}
+      {/* Modal Recover Stale Suite Runs */}
+      {showRecoverModal && (
+        <Drawer
+          title="Thu hồi các lượt chạy Suite bị treo"
+          subtitle="Hủy các lượt chạy timeout (> 5 phút) để giải phóng tài nguyên"
+          onClose={() => setShowRecoverModal(false)}
+        >
+          <div className="detail-section">
+            <p>
+              Các lượt chạy Suite quá 5 phút chưa hoàn thành sẽ được đánh dấu trạng thái <code>STALE_TIMEOUT</code> và dừng xử lý.
+            </p>
+            <div style={{ marginBottom: '1rem' }}>
+              <label style={{ display: 'block', fontSize: '0.85rem', marginBottom: 3 }}>Lý do thu hồi (Audit reason)</label>
+              <input
+                type="text"
+                value={recoverReason}
+                onChange={e => setRecoverReason(e.target.value)}
+                style={{ width: '100%' }}
+              />
+            </div>
+            <div className="toolbar" style={{ display: 'flex', gap: '0.5rem' }}>
+              <button
+                className="primary-button"
+                disabled={recovering || !recoverReason.trim() || !recoverPkgId}
+                onClick={() => recoverPkgId && handleRecoverStale(recoverPkgId)}
+              >
+                {recovering ? 'Đang thu hồi…' : 'Xác nhận thu hồi'}
+              </button>
+              <button className="light-button" onClick={() => setShowRecoverModal(false)}>
+                Hủy
+              </button>
+            </div>
           </div>
         </Drawer>
       )}

@@ -1,4 +1,4 @@
-import { useState } from 'react';
+import { useState, useRef } from 'react';
 import { useMutation, type UseMutationOptions } from '@tanstack/react-query';
 
 export interface SafeMutationConfig<TData, TVariables> {
@@ -18,12 +18,16 @@ export function useSafeMutation<TData = unknown, TVariables = unknown>({
   const [pendingVariables, setPendingVariables] = useState<TVariables | null>(null);
   const [reason, setReason] = useState('');
   const [errorMsg, setErrorMsg] = useState<string | null>(null);
+  const isSubmittingRef = useRef(false);
+  const activeIdempotencyKeyRef = useRef<string | null>(null);
 
   const mutation = useMutation({
     mutationFn: async (vars: TVariables & { reason: string; idempotencyKey: string }) => {
       return mutationFn(vars);
     },
     onSuccess: data => {
+      isSubmittingRef.current = false;
+      activeIdempotencyKeyRef.current = null;
       setIsOpen(false);
       setPendingVariables(null);
       setReason('');
@@ -31,6 +35,7 @@ export function useSafeMutation<TData = unknown, TVariables = unknown>({
       onSuccess?.(data);
     },
     onError: (err: Error) => {
+      isSubmittingRef.current = false;
       setErrorMsg(err.message || 'Lỗi thực thi');
       onError?.(err);
     },
@@ -40,29 +45,40 @@ export function useSafeMutation<TData = unknown, TVariables = unknown>({
     setPendingVariables(vars);
     setReason('');
     setErrorMsg(null);
+    activeIdempotencyKeyRef.current = typeof crypto !== 'undefined' && crypto.randomUUID
+      ? crypto.randomUUID()
+      : `idemp-${Date.now()}-${Math.random().toString(36).slice(2, 9)}`;
+    isSubmittingRef.current = false;
     setIsOpen(true);
   };
 
   const confirmAction = () => {
+    if (isSubmittingRef.current || mutation.isPending) return;
     if (!reason.trim() || reason.trim().length < 8) {
       setErrorMsg('Vui lòng nhập lý do tối thiểu 8 ký tự.');
       return;
     }
     if (!pendingVariables) return;
 
-    const idempotencyKey = typeof crypto !== 'undefined' && crypto.randomUUID
-      ? crypto.randomUUID()
-      : `idemp-${Date.now()}-${Math.random().toString(36).slice(2, 9)}`;
+    if (!activeIdempotencyKeyRef.current) {
+      activeIdempotencyKeyRef.current = typeof crypto !== 'undefined' && crypto.randomUUID
+        ? crypto.randomUUID()
+        : `idemp-${Date.now()}-${Math.random().toString(36).slice(2, 9)}`;
+    }
 
+    isSubmittingRef.current = true;
+    setErrorMsg(null);
     mutation.mutate({
       ...pendingVariables,
       reason: reason.trim(),
-      idempotencyKey,
+      idempotencyKey: activeIdempotencyKeyRef.current,
     });
   };
 
   const cancelAction = () => {
-    if (mutation.isPending) return;
+    if (isSubmittingRef.current || mutation.isPending) return;
+    isSubmittingRef.current = false;
+    activeIdempotencyKeyRef.current = null;
     setIsOpen(false);
     setPendingVariables(null);
     setReason('');

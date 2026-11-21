@@ -106,21 +106,21 @@ function QuoteBox({ symbol, exchange, quote, liveDone, hasStored, loading, error
       <small>Trực tiếp · {liveSources.board}<button className="icon-button" disabled={loading} onClick={refresh} aria-label="Cập nhật giá"><RefreshCw size={13} /></button></small>
     </div>;
   }
-  if (!needStored) return <div className="quote"><strong>—</strong><span>{liveDone ? 'Chưa có giá' : 'Đang lấy giá…'}</span></div>;
+  if (!needStored) return <div className="quote"><strong>—</strong><span>{liveDone ? (error ? 'Nguồn trực tiếp lỗi: ' + error.message : 'Chưa có giá trực tiếp') : (!liveEnabled ? 'Nguồn trực tiếp đang tắt' : 'Đang lấy giá…')}</span></div>;
   return <div className="quote"><strong>{decimal(stored.data?.price)} <small>{stored.data?.currency}</small></strong><span>Giá đã lưu · {date(stored.data?.asOf)}</span><small>{stored.data?.source}</small>
     {(error || !liveEnabled) && <small className="negative" role="alert">{liveEnabled ? 'Nguồn trực tiếp chưa phản hồi: ' + error?.message : 'Nguồn trực tiếp đang tắt'}</small>}</div>;
 }
 
 function storedCandles(prices: Price[]): Candle[] {
   return prices.filter(p => p.close !== null && p.open && p.high && p.low).map(p => {
-    const divisor = (!p.currency || p.currency === 'VND') && p.priceBasis !== 'THOUSAND_VND' ? 1000 : 1;
+    const divisor = (!p.currency || p.currency === 'VND') ? 1000 : 1;
     return {
       time: Date.parse(p.timestamp) / 1000,
       open: Number(p.open) / divisor,
       high: Number(p.high) / divisor,
       low: Number(p.low) / divisor,
       close: Number(p.close) / divisor,
-      volume: Number(p.volume || 0),
+      volume: Number(p.volume ?? 0) || 0,
     };
   });
 }
@@ -133,7 +133,22 @@ function ChartPanel({ symbol, exchange, quote, storedHistory = true }: { symbol:
   const days = chartRanges.find(r => r.key === range)?.days || 183;
   const to = tradingToday();
   const fromDate = new Date(to + 'T00:00:00Z'); fromDate.setUTCDate(fromDate.getUTCDate() - Math.max(days, 31));
-  const stored = useQuery({ queryKey: ['prices', symbol, exchange, fromDate.toISOString().slice(0, 10), to, 0], enabled: fallback, staleTime: 1_800_000, queryFn: ({ signal }) => apiPage<Price>('prices', [symbol], { exchange, from: fromDate.toISOString().slice(0, 10), to, interval: '1d', size: 500, page: 0 }, signal) });
+  const stored = useQuery({
+    queryKey: ['prices', symbol, exchange, fromDate.toISOString().slice(0, 10), to],
+    enabled: fallback,
+    staleTime: 1_800_000,
+    queryFn: async ({ signal }) => {
+      let page = 0;
+      let allItems: Price[] = [];
+      while (page < 4) {
+        const res = await apiPage<Price>('prices', [symbol], { exchange, from: fromDate.toISOString().slice(0, 10), to, interval: '1d', size: 500, page }, signal);
+        allItems = allItems.concat(res.items || []);
+        if (!res.hasNext || !res.items || res.items.length < 500) break;
+        page++;
+      }
+      return { items: allItems, total: allItems.length, page: 0, size: allItems.length, totalPages: 1, hasNext: false };
+    },
+  });
   const candles = useMemo(() => fallback ? storedCandles(stored.data?.items || []) : live.data || [], [fallback, stored.data, live.data]);
   const pending = fallback ? stored.isPending : live.isPending;
   return <>
