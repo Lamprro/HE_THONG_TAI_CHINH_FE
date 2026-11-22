@@ -26,13 +26,12 @@ import { OperationsHistory } from '../features/admin/OperationsHistory';
 import { ActiveCommandsBanner } from '../features/admin/ActiveCommandsBanner';
 import { LineageTracerPage } from '../features/admin/LineageTracerPage';
 import { CommandTracker } from '../features/admin/CommandTracker';
-import { SchedulePanel } from '../features/admin/SchedulePanel';
 import { SystemSummary } from '../features/admin/SystemSummary';
 
 const descriptions: Record<Section, string> = {
   overview: 'Sức khỏe hệ thống, số liệu toàn database, lượt chạy và lỗi validation gần nhất.',
   workflow: 'Lấy nguồn qua Python → validation → build đúng version vào bảng cuối, hoặc tiếp tục từ nguồn đã lưu.',
-  history: 'Tác vụ nền, lượt chạy nguồn, validation/version và audit; theo dõi hoặc xử lý tiếp từ bằng chứng đã lưu.',
+  history: 'Tác vụ nền, lượt chạy nguồn, validation và phiên bản; theo dõi hoặc xử lý tiếp từ bằng chứng đã lưu.',
   jobs: 'Định nghĩa job, lịch cron, chạy một lần và cấu hình nguồn dữ liệu.',
   scope: 'Công ty, mã chứng khoán, alias và việc cấp job theo mã.',
   quality: 'Kết quả validation, luật và phiên bản dữ liệu.',
@@ -40,8 +39,8 @@ const descriptions: Record<Section, string> = {
   data: 'Tra cứu toàn bộ bảng có phân trang, lọc chính xác theo nguồn gốc.',
   system: 'Java, database, Python, scheduler, độ phủ dữ liệu và danh mục API quản trị.',
 };
-type HistoryKind = 'commands' | 'runs' | 'all-runs' | 'quality' | 'audit';
-const historyTabs: [HistoryKind, string][] = [['commands', 'Tác vụ nền'], ['runs', 'Lượt chạy gần đây'], ['all-runs', 'Toàn bộ lượt chạy'], ['quality', 'Validation & version'], ['audit', 'Audit quản trị']];
+type HistoryKind = 'commands' | 'runs' | 'all-runs' | 'quality';
+const historyTabs: [HistoryKind, string][] = [['commands', 'Tác vụ nền'], ['runs', 'Lượt chạy gần đây'], ['all-runs', 'Toàn bộ lượt chạy'], ['quality', 'Validation & version']];
 const writeNote = 'Mọi thao tác ghi đều có bước xem lại trước khi gửi.';
 
 function Tabs<T extends string>({ value, onChange, items }: { value: T; onChange: (value: T) => void; items: [T, string][] }) {
@@ -172,7 +171,7 @@ function Dashboard() {
 
       {section === 'system' && <>
         <Tabs value={systemTab} onChange={setSystemTab} items={[['status', 'Trạng thái & độ phủ'], ['market', 'Dữ liệu thị trường'], ['api', 'Danh mục & tài liệu API']]}/>
-        {systemTab === 'status' ? <><RuntimePage onWorkflow={openWorkflow}/><SchedulePanel/></> : systemTab === 'market' ? <MarketDataAdminPage/> : <CatalogMaintenancePanel/>}
+        {systemTab === 'status' ? <RuntimePage onWorkflow={openWorkflow}/> : systemTab === 'market' ? <MarketDataAdminPage/> : <CatalogMaintenancePanel/>}
       </>}
     </div>
     <RunDrawer onRaw={id => { setRunId(null); setRawId(id); }} onIssue={value => { setRunId(null); setIssue(value); }} id={runId} onClose={() => setRunId(null)} onOperation={setOperation} onJob={id => { setRunId(null); openJobs(id); }} onSource={id => { setRunId(null); openSources(id); }} onQuality={id => { setRunId(null); openQuality(id, null, 'validation'); }}/>

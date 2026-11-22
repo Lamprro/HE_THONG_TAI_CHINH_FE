@@ -24,7 +24,6 @@ function RuntimeStatusPanel() {
       <dt>PostgreSQL</dt><dd>{status.database}</dd>
       <dt>Múi giờ</dt><dd>{status.timezone}</dd>
       <dt>Worker lệnh</dt><dd>{status.adminWorkers.commandsEnabled ? 'Bật' : 'Tắt'}</dd>
-      <dt>Worker lịch Admin</dt><dd>{status.adminWorkers.scheduleEnabled ? 'Bật' : 'Tắt'}</dd>
       {Object.entries(status.schedulers).map(([name, scheduler]) => <div key={name}>
         <dt>{name}</dt><dd>{scheduler.enabled ? 'Đã bật cấu hình' : 'Tắt'}</dd>
       </div>)}
@@ -34,7 +33,7 @@ function RuntimeStatusPanel() {
 
 export function RuntimePage({ onWorkflow }: { onWorkflow?: (selection: WorkflowSelection) => void }) {
   return <div className="admin-stack">
-    <p>Java UP không chứng minh Python, nhà cung cấp hoặc scheduler đang hoạt động. Cờ enabled là cấu hình; khi chưa có heartbeat, màn hình không suy diễn lần chạy gần nhất.</p>
+    <p>Java UP không chứng minh Python, nhà cung cấp hoặc scheduler đang hoạt động. Lịch lấy từ cron và trạng thái bật của từng job. Xem lượt chạy trong mục Tác vụ & lịch sử.</p>
     <CoverageRemediationPanel onWorkflow={onWorkflow} />
     <RuntimeStatusPanel />
     <Panel title="Tài liệu API quản trị">

@@ -40,7 +40,7 @@ await page.route('**/api/**', async route => {
     if (path === '/api/admin/catalog/master-data/seed') return reply({ count: 3 });
     return reply({ message: 'Unexpected mutation in test' }, 400);
   }
-  if (path === '/api/admin/console/runtime') return reply({ database: 'UP', timezone: 'Asia/Ho_Chi_Minh', schedulers: {}, adminWorkers: { commandsEnabled: false, scheduleEnabled: false } });
+  if (path === '/api/admin/console/runtime') return reply({ database: 'UP', timezone: 'Asia/Ho_Chi_Minh', schedulers: {}, adminWorkers: { commandsEnabled: false } });
   if (path === '/api/admin/console/session') return reply({ authenticated: true, principal: 'fixture-admin', email: null, authorities: ['ROLE_ADMIN'] });
   if (path === '/api/health') return reply({ status: 'UP', service: 'Fixture Java' });
   if (path === '/api/ingestion-jobs') { assert.equal(url.searchParams.get('activeOnly'), 'false'); return reply([job]); }
