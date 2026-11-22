@@ -132,7 +132,9 @@ try {
     page.getByLabel('Job', { exact: true }).selectOption(job.id),
   ]);
   await button('Mở lượt chạy').click();
-  await page.getByRole('heading', { name: 'Luồng của lượt chạy' }).waitFor();
+  const drawer = page.getByRole('dialog', { name: 'Lượt chạy job' });
+  const stages = await drawer.locator('.run-stages h3').allTextContents();
+  assert.deepEqual(stages, ['1. Dữ liệu nguồn', '2. Kết quả kiểm tra', '3. Ghi dữ liệu']);
   await button('Xem dữ liệu đã ghi').click();
   await page.getByText('123456.780000', { exact: true }).waitFor();
   assert.equal(await page.getByText('Bảng dữ liệu', { exact: true }).count(), 0);
@@ -142,6 +144,24 @@ try {
     await page.screenshot({ path: resolve(process.env.ADMIN_SCREENSHOT_DIR, 'admin-output-mobile.png') });
   }
   assert.equal(await page.evaluate(() => document.documentElement.scrollWidth <= innerWidth), true);
+  await button('Chất lượng dữ liệu').click();
+  assert.equal(await button('Truy vết nguồn (Lineage)').count(), 0);
+  for (const width of [1440, 390]) {
+    await page.setViewportSize({ width, height: 545 });
+    await button('Tổng quan').click();
+    const sidebar = page.locator('.sidebar');
+    const before = await sidebar.boundingBox();
+    const main = page.locator('.main');
+    await main.hover();
+    await page.mouse.wheel(0, 480);
+    await page.waitForFunction(() => document.querySelector('.main').scrollTop > 0);
+    assert.deepEqual(await sidebar.boundingBox(), before);
+    assert.equal(await main.evaluate(element => element.scrollWidth <= element.clientWidth), true);
+    await button('Tác vụ & lịch sử').click();
+    assert.deepEqual(await sidebar.boundingBox(), before);
+    assert.equal(await main.evaluate(element => element.scrollTop), 0);
+  }
+
   await page.setViewportSize({ width: 390, height: 844 }); await button('Job & nguồn').click(); await button('Job lấy dữ liệu').click(); await button('Tạo job').click();
   assert.equal(await page.evaluate(() => document.documentElement.scrollWidth <= innerWidth), true);
   await page.keyboard.press('Escape'); assert.equal(await page.getByRole('dialog').count(), 0);
