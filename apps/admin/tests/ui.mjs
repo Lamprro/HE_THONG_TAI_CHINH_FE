@@ -23,6 +23,9 @@ const job = { id: '00000000-0000-0000-0000-000000000001', dataSourceId: 1, dataS
 const company = { id: 'company-1', companyCode: 'ACME', legalName: 'Acme Company', shortName: 'Acme', englishName: null, taxCode: '123', industryCode: null, industryName: 'Technology', sectorName: null, website: null, headquarters: null, foundedDate: null, listingStatus: null, description: 'Test master record', active: true };
 const security = { id: 'security-1', companyId: company.id, symbol: 'FPT', exchange: 'HOSE', securityType: 'STOCK', isin: null, currency: 'VND', listedDate: null, delistedDate: null, sharesOutstanding: 1000, parValue: 10000, primary: true, active: false };
 const run = { id: '00000000-0000-0000-0000-000000000002', ingestionJobId: job.id, dataSourceId: 1, triggerType: 'MANUAL', status: 'SUCCESS', fetchedCount: 2, insertedCount: 2, updatedCount: 0, rejectedCount: 0, errorCount: 0, startedAt: '2026-10-15T00:00:00Z', finishedAt: '2026-10-15T00:01:00Z', createdAt: '2026-10-15T00:00:00Z' };
+const internalJob = { ...job, id: '00000000-0000-0000-0000-000000000018', code: 'MARKET_PRICE_BUILD', name: 'Price Build' };
+const activatedVersion = { id: 'version-3', data_domain: 'MARKET_PRICE', version_code: 'VERSION-3', status: 'ACTIVATED', ingestion_run_id: run.id };
+
 await page.route('**/api/**', async route => {
   const request = route.request(), url = new URL(request.url());
   if (request.method() === 'OPTIONS') return route.fulfill({ status: 204, headers: { 'Access-Control-Allow-Origin': '*', 'Access-Control-Allow-Headers': '*', 'Access-Control-Allow-Methods': 'GET,POST,OPTIONS' } });
@@ -31,7 +34,24 @@ await page.route('**/api/**', async route => {
   });
   if (request.method() !== 'GET') { writes.push(request.url()); await route.abort(); return; }
   const path = url.pathname;
-  const data = path === '/api/admin/console/session' ? { authenticated: true, principal: 'fixture-admin', email: null, authorities: ['ROLE_ADMIN'] } : path === '/api/companies' ? [company] : path === '/api/securities' ? [security] : path.endsWith('/aliases') ? [{ id: 1, alias: 'Acme Legacy', aliasType: 'FORMER_NAME' }] : path === '/api/health' ? { status: 'UP', service: 'financial-data-api' } : path === '/api/data-sources' ? [source] : path === '/api/ingestion-jobs' ? [job] : path === '/api/ingestions' ? [run] : path === `/api/ingestions/${run.id}` ? run : path === '/api/raw-payloads' ? [{ id: 'raw-1', ingestionRunId: run.id, dataSourceId: 1, contentType: 'application/json' }] : path === '/api/raw-payloads/raw-1' ? { id: 'raw-1', ingestionRunId: run.id, dataSourceId: 1, contentType: 'application/json', fetchedAt: run.createdAt, createdAt: run.createdAt, checksumSha256: 'a'.repeat(64), body: null } : path === '/api/admin/console/data/validation_results' ? { rows: [{ id: 'validation-1', validation_rule_id: '1', rule_code: 'RAW_REQUIRED', raw_payload_id: 'raw-1', ingestion_run_id: run.id, severity: 'ERROR', result_status: 'FAIL', handling_status: 'OPEN', message: 'Required field missing', observed_value: 'null', expected_value: 'value', checked_at: run.createdAt, resolved_by_user_id: null, resolved_at: null, resolution_note: 'Check source mapping' }], total: 1 } : path === '/api/admin/console/data/data_versions' ? { rows: [{ id: 'version-2', data_domain: 'MARKET_PRICE', version_code: 'VERSION-2', status: 'REJECTED', parent_data_version_id: 'version-1', ingestion_run_id: run.id, created_at: run.createdAt, activated_at: null, checksum_sha256: 'b'.repeat(64), row_count: '2' }, { id: 'version-1', version_code: 'VERSION-1', status: 'ACTIVE', parent_data_version_id: null, ingestion_run_id: run.id, created_at: run.createdAt }], total: 2 } : path === '/api/admin/validation/rules' ? [{ id: 1, code: 'RAW_REQUIRED', name: 'Required fields', dataDomain: 'MARKET_PRICE', severity: 'ERROR', ruleType: 'SCHEMA', isActive: true, ruleConfig: {}, createdAt: run.createdAt, updatedAt: run.createdAt }] : [];
+  const data = path === '/api/admin/console/session' ? { authenticated: true, principal: 'fixture-admin', email: null, authorities: ['ROLE_ADMIN'] } : path === '/api/companies' ? [company] : path === '/api/securities' ? [security] : path.endsWith('/aliases') ? [{ id: 1, alias: 'Acme Legacy', aliasType: 'FORMER_NAME' }] : path === '/api/health' ? { status: 'UP', service: 'financial-data-api' } : path === '/api/data-sources' ? [source] : path === '/api/ingestion-jobs' ? [job, internalJob] : path === '/api/ingestions' ? [run] : path === `/api/ingestions/${run.id}` ? run : path === '/api/raw-payloads' ? [{ id: 'raw-1', ingestionRunId: run.id, dataSourceId: 1, contentType: 'application/json' }] : path === '/api/raw-payloads/raw-1' ? { id: 'raw-1', ingestionRunId: run.id, dataSourceId: 1, contentType: 'application/json', fetchedAt: run.createdAt, createdAt: run.createdAt, checksumSha256: 'a'.repeat(64), body: null } : path === '/api/admin/console/data/validation_results' ? { rows: [{ id: 'validation-1', validation_rule_id: '1', rule_code: 'RAW_REQUIRED', raw_payload_id: 'raw-1', ingestion_run_id: run.id, severity: 'ERROR', result_status: 'FAIL', handling_status: 'OPEN', message: 'Required field missing', observed_value: 'null', expected_value: 'value', checked_at: run.createdAt, resolved_by_user_id: null, resolved_at: null, resolution_note: 'Check source mapping' }], total: 1 } : path === '/api/admin/console/data/data_versions' ? { rows: [{ id: 'version-2', data_domain: 'MARKET_PRICE', version_code: 'VERSION-2', status: 'REJECTED', parent_data_version_id: 'version-1', ingestion_run_id: run.id, created_at: run.createdAt, activated_at: null, checksum_sha256: 'b'.repeat(64), row_count: '2' }, { id: 'version-1', version_code: 'VERSION-1', status: 'ACTIVE', parent_data_version_id: null, ingestion_run_id: run.id, created_at: run.createdAt }], total: 2 } : path === '/api/admin/validation/rules' ? [{ id: 1, code: 'RAW_REQUIRED', name: 'Required fields', dataDomain: 'MARKET_PRICE', severity: 'ERROR', ruleType: 'SCHEMA', isActive: true, ruleConfig: {}, createdAt: run.createdAt, updatedAt: run.createdAt }] : [];
+  if (path === '/api/admin/console/data/ingestion_runs') {
+    const matched = !url.searchParams.has('ingestion_job_id') || url.searchParams.get('ingestion_job_id') === job.id;
+    return route.fulfill({ json: { total: matched ? 1 : 0, rows: matched ? [{
+      id: run.id, ingestion_job_id: job.id, data_source_id: run.dataSourceId, status: run.status,
+      started_at: run.startedAt, fetched_count: 2, inserted_count: 2, error_count: 0,
+    }] : [] }, headers: { 'Access-Control-Allow-Origin': '*' } });
+  }
+  if (path === '/api/admin/console/datasets') {
+    return route.fulfill({ json: [{ name: 'market_prices', available: true, columns: ['id','data_version_id','raw_payload_id'], exactFilters: ['id','data_version_id','raw_payload_id'] }], headers: { 'Access-Control-Allow-Origin': '*' } });
+  }
+  if (path === '/api/admin/console/data/market_prices') {
+    assert.equal(url.searchParams.get('data_version_id'), activatedVersion.id);
+    return route.fulfill({ json: { rows: [{ id: '19', symbol: 'FPT', close_price: '123456.780000', raw_payload_id: 'raw-1' }], total: 1 }, headers: { 'Access-Control-Allow-Origin': '*' } });
+  }
+  if (path === '/api/admin/console/data/data_versions' && url.searchParams.get('runId') === run.id && url.searchParams.get('size') === '100') {
+    data.rows.push(activatedVersion);
+  }
   const resolved = path === '/api/admin/validation/results' || path === '/api/admin/validation/results/open' ? [{ id: 'validation-1', validationRuleId: 1, ruleCode: 'RAW_REQUIRED', rawPayloadId: 'raw-1', ingestionRunId: run.id, severity: 'ERROR', status: 'FAIL', handlingStatus: 'OPEN', message: 'Required field missing', observedValue: 'null', expectedValue: 'value', checkedAt: run.createdAt, resolvedByUserId: null, resolvedAt: null, resolutionNote: 'Check source mapping' }] : path === '/api/admin/validation/data-versions' ? [{ id: 'version-2', dataDomain: 'MARKET_PRICE', versionCode: 'VERSION-2', status: 'REJECTED', parentDataVersionId: 'version-1', ingestionRunId: run.id, createdAt: run.createdAt, activatedAt: null, checksumSha256: 'b'.repeat(64), rowCount: 2 }, { id: 'version-1', versionCode: 'VERSION-1', status: 'ACTIVE', parentDataVersionId: null, ingestionRunId: run.id, createdAt: run.createdAt }] : data;
   await route.fulfill({ json: resolved, headers: { 'Access-Control-Allow-Origin': request.headers().origin || '*', 'Access-Control-Allow-Credentials': 'true' } });
 });
@@ -72,7 +92,7 @@ try {
   await button('Validate dữ liệu chờ').click(); await page.getByLabel('Số payload tối đa *').fill('101'); await review();
   assert.equal(await page.getByText('Nhập số nguyên từ 1 đến 100.').count(), 1);
   await page.getByLabel('Số payload tối đa *').fill('50'); await review(); await available(); await close();
-  await button('Tác vụ & lịch sử').click(); await button('Lượt chạy gần đây').click(); await page.getByText('Price Import', { exact: true }).click();
+  await button('Tác vụ & lịch sử').click(); await button('Lịch sử job').click(); await page.getByText('Price Import', { exact: true }).click();
   await button('Chạy validation').click(); await review(); await available(); await close();
   await button('Danh mục mã').click(); await page.getByText('Acme Company', { exact: true }).click();
   await page.getByText('Acme Legacy', { exact: true }).waitFor(); await button('Sửa công ty').click();
@@ -91,7 +111,7 @@ try {
   await page.getByLabel('Tiền tệ *', { exact: true }).fill('VIETNAM'); await review();
   assert.equal(await page.getByText('Dùng mã tiền tệ 3 chữ cái.').count(), 1);
   await page.getByLabel('Tiền tệ *', { exact: true }).fill('VND'); await review(); await available(); await close();
-  await button('Tác vụ & lịch sử').click(); await button('Lượt chạy gần đây').click(); await page.getByText('Price Import', { exact: true }).click();
+  await button('Tác vụ & lịch sử').click(); await button('Lịch sử job').click(); await page.getByText('Price Import', { exact: true }).click();
   await button('Xem raw payload').click(); await page.getByText('SHA-256: ' + 'a'.repeat(64), { exact: true }).waitFor();
   await button('Xem validation của payload').click();
   await page.getByText('RAW_REQUIRED', { exact: true }).click();
@@ -99,6 +119,29 @@ try {
   await button('Xem raw payload').click(); await button('Xem version của lượt chạy').click();
   await page.getByText('VERSION-2', { exact: true }).click(); await button('Xem version cha').click();
   assert.equal(await page.getByRole('dialog').getByRole('heading', { name: 'VERSION-1', exact: true }).count(), 1); await close();
+  await button('Tác vụ & lịch sử').click(); await button('Lịch sử job').click();
+  await page.getByLabel('Nhóm job', { exact: true }).selectOption('source');
+  assert.equal(await page.getByRole('option', { name: /Price Build/ }).count(), 0);
+  await page.getByLabel('Trạng thái', { exact: true }).selectOption('SUCCESS');
+  await Promise.all([
+    page.waitForRequest(request => {
+      const url = new URL(request.url());
+      return url.pathname.endsWith('/data/ingestion_runs') && url.searchParams.get('ingestion_job_id') === job.id
+        && url.searchParams.get('status') === 'SUCCESS';
+    }),
+    page.getByLabel('Job', { exact: true }).selectOption(job.id),
+  ]);
+  await button('Mở lượt chạy').click();
+  await page.getByRole('heading', { name: 'Luồng của lượt chạy' }).waitFor();
+  await button('Xem dữ liệu đã ghi').click();
+  await page.getByText('123456.780000', { exact: true }).waitFor();
+  assert.equal(await page.getByText('Bảng dữ liệu', { exact: true }).count(), 0);
+  if (process.env.ADMIN_SCREENSHOT_DIR) {
+    await page.screenshot({ path: resolve(process.env.ADMIN_SCREENSHOT_DIR, 'admin-output-desktop.png') });
+    await page.setViewportSize({ width: 390, height: 844 });
+    await page.screenshot({ path: resolve(process.env.ADMIN_SCREENSHOT_DIR, 'admin-output-mobile.png') });
+  }
+  assert.equal(await page.evaluate(() => document.documentElement.scrollWidth <= innerWidth), true);
   await page.setViewportSize({ width: 390, height: 844 }); await button('Job & nguồn').click(); await button('Job lấy dữ liệu').click(); await button('Tạo job').click();
   assert.equal(await page.evaluate(() => document.documentElement.scrollWidth <= innerWidth), true);
   await page.keyboard.press('Escape'); assert.equal(await page.getByRole('dialog').count(), 0);
