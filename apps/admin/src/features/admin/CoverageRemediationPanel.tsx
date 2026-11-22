@@ -157,7 +157,7 @@ export function CoverageRemediationPanel({ onWorkflow }: { onWorkflow?: (selecti
     const term = search.trim().toUpperCase();
     return combinedRows.filter(row => {
       const matchSearch = !term || row.symbol.includes(term);
-      const matchFilter = filter === 'ALL' || row.status === filter;
+      const matchFilter = filter === 'ALL' || (filter === 'GAP_STATEMENTS' ? row.canonicalStatements === 0 : row.status === filter);
       return matchSearch && matchFilter;
     });
   }, [combinedRows, search, filter]);
@@ -184,9 +184,8 @@ export function CoverageRemediationPanel({ onWorkflow }: { onWorkflow?: (selecti
 
   return (
     <Panel
-      title="Ma trận độ phủ & Xử lý khoảng thiếu dữ liệu"
-      eyebrow="GIÁM SÁT & BÙ ĐẮP DỮ LIỆU"
-      note={`Kiểm tra độ phủ thực tế từ database tính đến phiên gần nhất (${latestTradingWeekday}): phát hiện khoảng thiếu theo mã/kỳ và 1-click kích hoạt workflow xử lý.`}
+      title="Độ phủ theo mã"
+      note={`Mốc so sánh giá: ${latestTradingWeekday.split('-').reverse().join('/')}`}
       action={
         <button
           className="text-button"
@@ -209,7 +208,7 @@ export function CoverageRemediationPanel({ onWorkflow }: { onWorkflow?: (selecti
           <strong style={{ color: 'var(--positive, #10b981)' }}>
             {combinedRows.filter(r => r.status === 'HEALTHY').length}
           </strong>
-          <span>Đầy đủ giá & BCTC</span>
+          <span>Có giá đến mốc và có BCTC</span>
         </div>
         <div>
           <strong style={{ color: 'var(--warning, #f59e0b)' }}>
@@ -219,7 +218,7 @@ export function CoverageRemediationPanel({ onWorkflow }: { onWorkflow?: (selecti
         </div>
         <div>
           <strong style={{ color: 'var(--danger, #ef4444)' }}>
-            {combinedRows.filter(r => r.status === 'GAP_STATEMENTS').length}
+            {combinedRows.filter(r => r.canonicalStatements === 0).length}
           </strong>
           <span>Thiếu BCTC</span>
         </div>
@@ -237,31 +236,35 @@ export function CoverageRemediationPanel({ onWorkflow }: { onWorkflow?: (selecti
           />
         </div>
 
-        <div style={{ display: 'flex', gap: '0.35rem', alignItems: 'center' }}>
+        <div className="coverage-filters">
           <Filter size={15} color="var(--muted, #64748b)" />
           <button
-            className={filter === 'ALL' ? 'active-filter' : 'light-button'}
+            aria-pressed={filter === 'ALL'}
+            className={filter === 'ALL' ? 'primary-button' : 'light-button'}
             onClick={() => setFilter('ALL')}
           >
             Tất cả ({combinedRows.length})
           </button>
           <button
-            className={filter === 'GAP_PRICE' ? 'active-filter' : 'light-button'}
+            aria-pressed={filter === 'GAP_PRICE'}
+            className={filter === 'GAP_PRICE' ? 'primary-button' : 'light-button'}
             onClick={() => setFilter('GAP_PRICE')}
           >
             Cần bù giá ({combinedRows.filter(r => r.status === 'GAP_PRICE').length})
           </button>
           <button
-            className={filter === 'GAP_STATEMENTS' ? 'active-filter' : 'light-button'}
+            aria-pressed={filter === 'GAP_STATEMENTS'}
+            className={filter === 'GAP_STATEMENTS' ? 'primary-button' : 'light-button'}
             onClick={() => setFilter('GAP_STATEMENTS')}
           >
-            Thiếu BCTC ({combinedRows.filter(r => r.status === 'GAP_STATEMENTS').length})
+            Thiếu BCTC ({combinedRows.filter(r => r.canonicalStatements === 0).length})
           </button>
           <button
-            className={filter === 'HEALTHY' ? 'active-filter' : 'light-button'}
+            aria-pressed={filter === 'HEALTHY'}
+            className={filter === 'HEALTHY' ? 'primary-button' : 'light-button'}
             onClick={() => setFilter('HEALTHY')}
           >
-            Đạt chuẩn ({combinedRows.filter(r => r.status === 'HEALTHY').length})
+            Có giá và BCTC ({combinedRows.filter(r => r.status === 'HEALTHY').length})
           </button>
         </div>
       </div>
@@ -274,7 +277,7 @@ export function CoverageRemediationPanel({ onWorkflow }: { onWorkflow?: (selecti
                 <th>Mã</th>
                 <th className="number">Phiên giá</th>
                 <th>Dải ngày giá</th>
-                <th className="number">Báo cáo (CĐKT)</th>
+                <th className="number">Báo cáo chuẩn</th>
                 <th className="number">Thiếu ngày CB</th>
                 <th>Tình trạng</th>
                 <th style={{ textAlign: 'right' }}>Hành động khắc phục</th>
@@ -303,9 +306,9 @@ export function CoverageRemediationPanel({ onWorkflow }: { onWorkflow?: (selecti
                   <td className="number">{row.missingPub > 0 ? <span style={{ color: 'var(--warning, #f59e0b)' }}>{row.missingPub}</span> : '0'}</td>
                   <td>
                     {row.status === 'HEALTHY' ? (
-                      <Badge tone="green">Đầy đủ</Badge>
+                      <Badge tone="green">Có giá và BCTC</Badge>
                     ) : row.status === 'GAP_PRICE' ? (
-                      <Badge tone="amber">Thiếu giá</Badge>
+                      <Badge tone="amber">Giá chưa đến mốc</Badge>
                     ) : (
                       <Badge tone="red">Thiếu BCTC</Badge>
                     )}
@@ -395,7 +398,7 @@ export function CoverageRemediationPanel({ onWorkflow }: { onWorkflow?: (selecti
               <div>
                 <span>Trạng thái độ phủ</span>
                 <Badge tone={selectedDetail.status === 'HEALTHY' ? 'green' : selectedDetail.status === 'GAP_PRICE' ? 'amber' : 'red'}>
-                  {selectedDetail.status === 'HEALTHY' ? 'Đầy đủ' : selectedDetail.status === 'GAP_PRICE' ? 'Thiếu giá' : 'Thiếu BCTC'}
+                  {selectedDetail.status === 'HEALTHY' ? 'Có giá và BCTC' : selectedDetail.status === 'GAP_PRICE' ? 'Giá chưa đến mốc' : 'Thiếu BCTC'}
                 </Badge>
               </div>
               <div>
@@ -446,7 +449,7 @@ export function CoverageRemediationPanel({ onWorkflow }: { onWorkflow?: (selecti
                   </div>
                 ) : (
                   <p className="subtle" style={{ color: 'var(--positive, #10b981)', margin: '0.25rem 0' }}>
-                    ✓ Không phát hiện phiên giao dịch nào bị thiếu so với lịch sàn VNINDEX.
+                    {gapsQuery.data.totalCalendarDays ? 'Không thiếu phiên theo lịch đã có.' : 'Chưa có lịch giao dịch để đối chiếu.'}
                   </p>
                 )}
               </div>

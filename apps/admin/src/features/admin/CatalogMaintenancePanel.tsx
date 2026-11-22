@@ -24,8 +24,8 @@ export function CatalogMaintenancePanel() {
     retry: false,
   });
 
-  return <Panel title="Nạp danh mục">
-    <p>Chỉ chạy khi cần cập nhật danh mục hoặc khởi tạo môi trường mới.</p>
+  return <Panel title="Nạp danh mục"
+    action={<a className="light-button" href={API_BASE + '/admin-api-docs/index.html'} target="_blank" rel="noreferrer">Mở Swagger UI</a>}>
     <div className="toolbar">
       {(Object.keys(operations) as CatalogAction[]).map(action => <button key={action} className="light-button"
         disabled={mutation.isPending} onClick={() => { mutation.reset(); setSelected(action); }}>

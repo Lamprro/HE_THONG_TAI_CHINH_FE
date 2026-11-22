@@ -1,35 +1,119 @@
 import { useState } from 'react';
 import { useQuery } from '@tanstack/react-query';
 import { API_BASE, getJson } from '../../shared/api/client';
-import { Panel, QueryState } from '../../shared/components/Ui';
+import { Drawer, Panel, QueryState } from '../../shared/components/Ui';
 import { Records, type Row } from './Records';
+import { dataLabels, isOutputTable, statusLabels, tableStatuses, useAdminRows, type DataSelection } from './dataViews';
+
 interface Dataset { name: string; available: boolean; columns: string[]; exactFilters?: string[] }
-interface Page { rows: Row[]; total: number; page: number; size: number; omittedColumns?: string[] }
-export function DataBrowser({ onRun, onRaw }: { onRun: (id: string) => void; onRaw: (id: string) => void }) {
-  const [table, setTable] = useState('ingestion_runs');
+const fallbackExact = ['id', 'raw_payload_id', 'data_version_id', 'security_id', 'llm_run_id', 'validation_target', 'data_source_id', 'ingestion_job_id'];
+const exactLabels: Record<string, string> = {
+  data_version_id: 'ID phiên bản', raw_payload_id: 'ID dữ liệu nguồn', ingestion_job_id: 'ID job',
+  security_id: 'ID chứng khoán', data_source_id: 'ID nguồn', financial_statement_id: 'ID báo cáo',
+};
+const exactQuery = (exact: Record<string, string>) => new URLSearchParams(
+  Object.entries(exact).map(([key, value]) => [key, value.trim()]).filter(([, value]) => value),
+).toString();
+
+export function DataBrowser({ initial, onRun, onRaw, onBack }: {
+  initial?: DataSelection; onBack?: () => void; onRun: (id: string) => void; onRaw: (id: string) => void;
+}) {
+  const [table, setTable] = useState(initial?.table ?? 'market_prices');
   const [page, setPage] = useState(0);
-  const [search, setSearch] = useState(''); const [run, setRun] = useState(''); const [status, setStatus] = useState('');
-  const [filter, setFilter] = useState('');
-  const [exact, setExact] = useState<Record<string,string>>({});
-  const catalog = useQuery({ queryKey: ['admin-datasets'], queryFn: () => getJson<Dataset[]>(API_BASE, '/api/admin/console/datasets') });
-  const data = useQuery({ queryKey: ['admin-data', table, page, filter], queryFn: () => getJson<Page>(API_BASE, `/api/admin/console/data/${table}?page=${page}&size=25${filter}`) });
-  const selected = catalog.data?.find(d => d.name === table);
+  const [report, setReport] = useState<{ id: string; symbol: string }>();
+  const [search, setSearch] = useState('');
+  const [run, setRun] = useState('');
+  const [status, setStatus] = useState('');
+  const [exact, setExact] = useState(initial?.exact ?? {});
+  const [filter, setFilter] = useState(() => exactQuery(initial?.exact ?? {}));
+  const catalog = useQuery({
+    queryKey: ['admin-datasets'], staleTime: 300000,
+    queryFn: () => getJson<Dataset[]>(API_BASE, '/api/admin/console/datasets'),
+  });
+  const available = Array.isArray(catalog.data) ? catalog.data.filter(item => item.available) : [];
+  const selected = available.find(item => item.name === table);
   const hasRun = selected?.columns.includes('ingestion_run_id');
-  const hasStatus = selected?.columns.some(c => ['status', 'result_status'].includes(c));
-  const exactKeys = selected?.exactFilters ?? ['id', 'raw_payload_id', 'data_version_id', 'security_id', 'llm_run_id', 'validation_target', 'data_source_id', 'ingestion_job_id'].filter(k => selected?.columns.includes(k));
-  return <Panel title="Dữ liệu, lịch sử và nguồn gốc" note="Phân trang trực tiếp từ database. Số đếm là tổng bản ghi theo bộ lọc; bảng có thể chứa các phiên bản lịch sử. Không mặc nhiên coi mọi hàng là dữ liệu sạch hiện hành.">
-    <QueryState query={catalog}><label>Bảng dữ liệu <select value={table} onChange={e => { setTable(e.target.value); setPage(0); setFilter(''); setSearch(''); setRun(''); setStatus(''); setExact({}); }}>{catalog.data?.map(d => <option key={d.name} value={d.name} disabled={!d.available}>{d.name}{!d.available ? ' · không có bảng này trong schema' : ''}</option>)}</select></label></QueryState>
-    <form className="toolbar filters" onSubmit={e => { e.preventDefault(); setPage(0); setFilter(`&search=${encodeURIComponent(search)}${hasRun && run ? `&runId=${encodeURIComponent(run)}` : ''}${hasStatus && status ? `&status=${encodeURIComponent(status)}` : ''}${Object.entries(exact).filter(([,v]) => v).map(([k,v]) => `&${k}=${encodeURIComponent(v)}`).join('')}`); }}>
-      <label>Tìm trong dữ liệu<input value={search} maxLength={100} onChange={e => setSearch(e.target.value)} placeholder="Mã, ID, lỗi; không tìm trong payload ẩn"/></label>
-      {hasRun && <label>Lượt chạy gốc<input value={run} onChange={e => setRun(e.target.value)} placeholder="UUID ingestion run"/></label>}
-      {hasStatus && <label>Trạng thái chính xác<input value={status} onChange={e => setStatus(e.target.value)} placeholder="FAILED / FAIL / ACTIVATED…"/></label>}
-      {['is_canonical', 'is_current'].filter(k => selected?.columns.includes(k)).map(k => <label key={k}>{k === 'is_canonical' ? 'Dữ liệu canonical' : 'Phiên bản hiện hành'}<select aria-label={k} value={exact[k] ?? ''} onChange={e => setExact(v => ({ ...v, [k]: e.target.value }))}><option value="">Tất cả, gồm lịch sử</option><option value="true">Chỉ bản được chọn</option><option value="false">Chỉ bản lịch sử</option></select></label>)}
-      <details><summary>Lọc chính xác nguồn gốc / ID</summary>{exactKeys.filter(k => !['is_canonical', 'is_current'].includes(k)).map(k => <label key={k}>{k}<input maxLength={200} value={exact[k] ?? ''} onChange={e => setExact(v => ({ ...v, [k]: e.target.value }))}/></label>)}</details>
-      <button className="primary-button">Áp dụng bộ lọc</button>
-      <button className="light-button" type="button" onClick={() => { setSearch(''); setRun(''); setStatus(''); setExact({}); setFilter(''); setPage(0); }}>Xóa bộ lọc</button>
-    </form>
-    <p aria-live="polite">Bộ lọc đang áp dụng: {filter ? [...new URLSearchParams(filter).entries()].filter(([,v]) => v).map(([k,v]) => `${k}: ${v}`).join(' · ') || 'Tất cả' : 'Tất cả'}. Thay đổi ô nhập cần bấm Áp dụng.</p>
-    <p className="subtle">ACTIVE: đã qua validation. ACTIVATED: đã được bước build đưa vào bảng cuối. FAIL vẫn là lỗi dù người vận hành đã đọc. Các số thập phân được trả dưới dạng chuỗi để giữ nguyên độ chính xác.</p>
-    <QueryState query={data}><Records key={`${table}-${page}-${filter}`} rows={Array.isArray(data.data?.rows) ? data.data.rows : []} onRun={onRun} onRaw={onRaw}/><div className="toolbar"><span>{(data.data?.total ?? 0).toLocaleString('vi-VN')} bản ghi · Trang {page + 1}</span><button className="light-button" disabled={page === 0 || data.isFetching} onClick={() => setPage(p => p - 1)}>Trang trước</button><button className="light-button" disabled={!data.data || (page + 1) * 25 >= data.data.total || data.isFetching} onClick={() => setPage(p => p + 1)}>Trang sau</button><button className="text-button" onClick={() => data.refetch()}>Tải lại dữ liệu</button></div></QueryState>
+  const statuses = tableStatuses[table];
+  const exactKeys = selected?.exactFilters ?? fallbackExact.filter(key => selected?.columns.includes(key));
+  const data = useAdminRows(table, page, filter, { enabled: !!selected });
+  const total = data.data?.total ?? 0;
+
+  const reset = () => {
+    setSearch('');
+    setRun('');
+    setStatus('');
+    setExact({});
+    setFilter('');
+    setPage(0);
+  };
+  const field = (key: string, value: string) => setExact(previous => ({ ...previous, [key]: value }));
+
+  return <Panel title={initial?.exact?.data_version_id ? 'Dữ liệu đã ghi theo phiên bản' : 'Tra cứu dữ liệu'}
+    action={onBack && <button className="light-button" onClick={onBack}>Quay lại</button>}>
+    <QueryState query={catalog}>
+      {available.length > 0 && <form className="ledger-filters" onSubmit={event => {
+        event.preventDefault();
+        const params = new URLSearchParams(exactQuery(exact));
+        if (search.trim()) params.set('search', search.trim());
+        if (hasRun && run.trim()) params.set('runId', run.trim());
+        if (statuses && status) params.set('status', status);
+        setPage(0);
+        setFilter(params.toString());
+      }}>
+        <label>Loại dữ liệu<select aria-label="Loại dữ liệu" value={table} onChange={event => { setTable(event.target.value); reset(); }}>
+          {!selected && <option value={table}>{dataLabels[table] ?? table}</option>}
+          {['Dữ liệu đã ghi', 'Lịch sử và danh mục'].map((group, index) =>
+            <optgroup key={group} label={group}>{available.filter(item => isOutputTable(item.name) === (index === 0))
+              .map(item => <option key={item.name} value={item.name}>{dataLabels[item.name] ?? item.name}</option>)}</optgroup>)}
+        </select></label>
+        <label>Tìm dữ liệu<input value={search} maxLength={100} onChange={event => setSearch(event.target.value)} placeholder="Mã, tên hoặc ID"/></label>
+        {statuses && <label>Trạng thái<select aria-label="Trạng thái" value={status} onChange={event => setStatus(event.target.value)}>
+          <option value="">Tất cả</option>{statuses.map(value => <option key={value} value={value}>{statusLabels[value] ?? value}</option>)}
+        </select></label>}
+        {['is_canonical', 'is_current'].filter(key => exactKeys.includes(key)).map(key =>
+          <label key={key}>{key === 'is_canonical' ? 'Bản chuẩn' : 'Hiện hành'}<select value={exact[key] ?? ''} onChange={event => field(key, event.target.value)}>
+            <option value="">Tất cả</option><option value="true">Có</option><option value="false">Không</option>
+          </select></label>)}
+        <div className="ledger-actions"><button className="primary-button">Áp dụng bộ lọc</button>
+          <button className="light-button" type="button" onClick={reset}>Xóa bộ lọc</button></div>
+        {(hasRun || exactKeys.some(key => !['is_canonical', 'is_current'].includes(key))) && <details className="ledger-more">
+          <summary>Lọc theo ID</summary>
+          <div className="ledger-filters">
+            {hasRun && <label>ID lượt chạy<input value={run} onChange={event => setRun(event.target.value)}/></label>}
+            {exactKeys.filter(key => !['is_canonical', 'is_current'].includes(key)).map(key =>
+              <label key={key}>{exactLabels[key] ?? key}<input maxLength={200} value={exact[key] ?? ''} onChange={event => field(key, event.target.value)}/></label>)}
+          </div>
+        </details>}
+      </form>}
+    </QueryState>
+    {!selected && catalog.isSuccess && <p className="state-empty">Loại dữ liệu này chưa có trên hệ thống.</p>}
+    {selected && <QueryState query={data}>
+      <div className="ledger-context"><code>{table}</code>
+        {new URLSearchParams(filter).get('data_version_id') && <span className="break">Phiên bản {new URLSearchParams(filter).get('data_version_id')}</span>}
+        {new URLSearchParams(filter).get('raw_payload_id') && <span className="break">Raw {new URLSearchParams(filter).get('raw_payload_id')}</span>}
+      </div>
+      <Records key={`${table}-${page}-${filter}`} rows={data.data?.rows ?? []} onRun={onRun} onRaw={onRaw}
+        actions={row => table === 'financial_statements' && row.is_canonical === true && row.is_current === true
+          && typeof row.id === 'string' && typeof row.symbol === 'string'
+          ? <button className="text-button" onClick={() => setReport({ id: String(row.id), symbol: String(row.symbol) })}>
+              Xem chỉ tiêu</button> : null}/>
+      <div className="toolbar ledger-pager">
+        <span>{total.toLocaleString('vi-VN')} bản ghi · Trang {page + 1}</span>
+        <button className="light-button" disabled={!page || data.isFetching} onClick={() => setPage(previous => previous - 1)}>Trang trước</button>
+        <button className="light-button" disabled={(page + 1) * 25 >= total || data.isFetching} onClick={() => setPage(previous => previous + 1)}>Trang sau</button>
+      </div>
+    </QueryState>}
+    {report && <StatementItems {...report} onClose={() => setReport(undefined)}/>}
   </Panel>;
+}
+
+function StatementItems({ id, symbol, onClose }: { id: string; symbol: string; onClose: () => void }) {
+  const query = useQuery({
+    queryKey: ['admin-published-statement', id, symbol],
+    queryFn: () => getJson<{ data?: { items?: Row[] } }>(API_BASE,
+      `/api/v1/securities/${encodeURIComponent(symbol)}/statements/${encodeURIComponent(id)}`),
+  });
+  return <Drawer title={`Chỉ tiêu báo cáo · ${symbol}`} subtitle={id} onClose={onClose}>
+    <QueryState query={query}><Records rows={query.data?.data?.items ?? []}/></QueryState>
+  </Drawer>;
 }

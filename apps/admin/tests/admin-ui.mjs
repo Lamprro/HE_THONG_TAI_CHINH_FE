@@ -63,12 +63,12 @@ try {
   await button('Xác nhận chạy luồng').dblclick(); await page.getByText('SUCCEEDED', { exact: true }).first().waitFor({ timeout: 10000 });
   assert.equal(writes.length, 1); assert.equal(writes[0].body.action, 'RUN_JOB'); assert.equal(writes[0].body.input.jobId, job.id);
   assert.match(writes[0].body.idempotencyKey, /^[a-f\d-]{36}$/); assert.equal(writes[0].body.reason, 'Rebuild reviewed prices');
-  await button('Tra cứu dữ liệu').click(); await page.getByText('12345678901234567890.125', { exact: true }).waitFor();
+  await button('Tra cứu dữ liệu').click(); await page.getByLabel('Loại dữ liệu').selectOption('ingestion_runs'); await page.getByText('12345678901234567890.125', { exact: true }).waitFor();
   await page.getByText('FPT', { exact: true }).waitFor(); await page.getByText('OHLCV', { exact: true }).waitFor();
   await button('Trang sau').click(); await page.getByText('51 bản ghi · Trang 2', { exact: true }).waitFor();
   await button('Chi tiết').click(); await page.getByRole('dialog').getByText('Source quota 429', { exact: true }).waitFor(); await button('Close').click();
-  await button('Hệ thống').click(); await page.getByRole('link', { name: 'Mở Swagger UI' }).waitFor();
-  await button('Danh mục & tài liệu API').click();
+  await button('Hệ thống').click(); await button('Danh mục & tài liệu API').click();
+  await page.getByRole('link', { name: 'Mở Swagger UI' }).waitFor();
   await button('Nạp danh mục công ty và mã').click();
   assert.equal(writes.length, 1);
   await button('Xác nhận nạp').click();
