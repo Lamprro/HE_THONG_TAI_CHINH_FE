@@ -1,4 +1,6 @@
 import { useState } from 'react';
+import type { AdminSession } from '../shared/api/admin-contract';
+import { Badge } from '../shared/components/Ui';
 import { RefreshCw } from 'lucide-react';
 import { useQueryClient } from '@tanstack/react-query';
 import { DataScopePage } from '../features/data-scope/DataScopePage';
@@ -12,7 +14,6 @@ import { JobsPage } from '../features/ingestion/components/JobsPage';
 import { JobRunHistory, RunDrawer } from '../features/ingestion/components/Runs';
 import { DataQualityPage, ValidationDrawer } from '../features/data-quality/components/QualityPage';
 import { SourcesPage } from '../features/data-sources/components/SourcesPage';
-import { dateTime } from '../shared/utils/format';
 import { OperationDrawer, type Operation } from '../features/operations/OperationDrawer';
 import { SessionGate } from '../shared/api/SessionGate';
 import { DataBrowser } from '../features/admin/DataBrowser';
@@ -25,22 +26,10 @@ import { WorkflowPage, type WorkflowSelection } from '../features/admin/Workflow
 import { AiOperationsPage } from '../features/admin/AiOperationsPage';
 import { OperationsHistory } from '../features/admin/OperationsHistory';
 import { ActiveCommandsBanner } from '../features/admin/ActiveCommandsBanner';
-import { LineageTracerPage } from '../features/admin/LineageTracerPage';
 import { CommandTracker } from '../features/admin/CommandTracker';
 import type { DataSelection } from '../features/admin/dataViews';
 import { SystemSummary } from '../features/admin/SystemSummary';
 
-const descriptions: Record<Section, string> = {
-  overview: 'Sức khỏe hệ thống, số liệu toàn database, lượt chạy và lỗi validation gần nhất.',
-  workflow: 'Lấy nguồn qua Python → validation → build đúng version vào bảng cuối, hoặc tiếp tục từ nguồn đã lưu.',
-  history: 'Tác vụ nền, lượt chạy nguồn, validation và phiên bản; theo dõi hoặc xử lý tiếp từ bằng chứng đã lưu.',
-  jobs: 'Định nghĩa job, lịch cron, chạy một lần và cấu hình nguồn dữ liệu.',
-  scope: 'Công ty, mã chứng khoán, alias và việc cấp job theo mã.',
-  quality: 'Kết quả validation, luật và phiên bản dữ liệu.',
-  ai: 'Dự báo, phân tích tin, khôi phục và prompt — mọi lần chạy đều có audit.',
-  data: 'Tra cứu toàn bộ bảng có phân trang, lọc chính xác theo nguồn gốc.',
-  system: 'Java, database, Python, scheduler, độ phủ dữ liệu và danh mục API quản trị.',
-};
 type HistoryKind = 'commands' | 'runs' | 'quality';
 const historyTabs: [HistoryKind, string][] = [['runs', 'Lịch sử job'], ['quality', 'Kiểm tra & ghi dữ liệu'], ['commands', 'Tác vụ nền']];
 
@@ -49,9 +38,9 @@ function Tabs<T extends string>({ value, onChange, items }: { value: T; onChange
 }
 
 export function App() {
-  return <SessionGate><Dashboard/></SessionGate>;
+  return <SessionGate>{(session, onLogout) => <Dashboard session={session} onLogout={onLogout}/>}</SessionGate>;
 }
-function Dashboard() {
+function Dashboard({ session, onLogout }: { session: AdminSession; onLogout: () => void }) {
   const [section, setSection] = useState<Section>('overview');
   const [workflow, setWorkflow] = useState<WorkflowSelection>({});
   const [historyKind, setHistoryKind] = useState<HistoryKind>('runs');
@@ -59,7 +48,7 @@ function Dashboard() {
   const [dataSelection, setDataSelection] = useState<DataSelection>();
   const [dataOrigin, setDataOrigin] = useState<{ section: Section; runId: string | null; rawId: string | null }>();
   const [jobsTab, setJobsTab] = useState<'jobs' | 'sources'>('jobs');
-  const [qualityTab, setQualityTab] = useState<'validation' | 'financial' | 'lineage'>('validation');
+  const [qualityTab, setQualityTab] = useState<'validation' | 'financial'>('validation');
   const [systemTab, setSystemTab] = useState<'status' | 'coverage' | 'market' | 'api'>('status');
   const [dark, setDark] = useState(false);
   const [runId, setRunId] = useState<string | null>(null);
@@ -85,11 +74,8 @@ function Dashboard() {
     : view === 'quality' ? [health, issues, results, versions, q.rules]
     : [health];
   const refreshing = activeQueries.some(query => query.isFetching);
-  const latest = (() => {
-    const timestamp = activeQueries.map(query => query.dataUpdatedAt).filter(Boolean).sort((a, b) => b - a)[0];
-    return timestamp ? new Date(timestamp).toISOString() : undefined;
-  })();
-  const connection = health.isPending ? 'Đang kiểm tra' : health.isError || health.data?.data.status !== 'UP' ? 'Mất kết nối' : 'Đã kết nối';
+  const connection = health.isPending ? 'Đang kiểm tra Java'
+    : health.isError || health.data?.data.status !== 'UP' ? 'Mất kết nối Java' : null;
   const current = sections.find(item => item.id === section)!;
   const openJobs = (id?: string) => { setJobLink(id ?? null); setJobsTab('jobs'); setSection('jobs'); };
   const openSources = (id?: number) => { setSourceLink(id ?? null); setJobsTab('sources'); setSection('jobs'); };
@@ -116,29 +102,25 @@ function Dashboard() {
   };
   const openWorkflow = (selection: WorkflowSelection) => { setWorkflow(selection); setSection('workflow'); };
 
-  return <AdminLayout section={section} setSection={navigate} dark={dark} setDark={setDark}>
-    <div className="topline">
-      <div className="breadcrumb">{current.group} <span>/</span> {current.title}</div>
-    </div>
+  return <AdminLayout section={section} setSection={navigate} dark={dark} setDark={setDark}
+    account={session.email ?? session.principal} onLogout={onLogout}>
     <div className="content">
       <header className="page-header">
-        <div>
-          <h1>{current.title}</h1>
-          {['overview', 'workflow', 'quality'].includes(section) && <p>{descriptions[section]}</p>}
-          <p className="last-updated">Cập nhật lúc {dateTime(latest)}</p>
-        </div>
+        <h1>{current.title}</h1>
         <div className="header-actions">
-          <button className="primary-button" disabled={refreshing} onClick={() => queryClient.invalidateQueries({ type: 'active' })}>
+          <button className="light-button" disabled={refreshing} onClick={() => queryClient.invalidateQueries({ type: 'active' })}>
             <RefreshCw size={15}/>{refreshing ? 'Đang tải…' : 'Tải lại'}
           </button>
         </div>
       </header>
-      <div className="connection-strip"><div><span className={`signal ${connection === 'Đã kết nối' ? 'online' : connection === 'Đang kiểm tra' ? '' : 'offline'}`}/><b>Java Backend</b><span>{connection}</span></div></div>
-      <ActiveCommandsBanner onSelectCommand={setTrackedCommand}/>
+      {connection && section !== 'system' && <div className="page-connection" role="status">
+        <Badge tone={health.isPending ? 'neutral' : 'red'}>{connection}</Badge>
+      </div>}
+      <ActiveCommandsBanner onSelectCommand={setTrackedCommand} onOpenHistory={() => { setHistoryKind('commands'); setSection('history'); }}/>
 
       {section === 'overview' && <>
         <SystemSummary/>
-        <Overview health={health} jobs={jobs} sources={sources} runs={runs} issues={issues} onRun={setRunId} onIssue={setIssue} onRuns={() => openHistory()} onQuality={() => setSection('quality')}/>
+        <Overview jobs={jobs} sources={sources} runs={runs} issues={issues} onRun={setRunId} onIssue={setIssue} onRuns={() => openHistory()} onQuality={() => setSection('quality')}/>
       </>}
 
       {section === 'workflow' && <WorkflowPage key={JSON.stringify(workflow)} initial={workflow} onRun={setRunId}/>}
@@ -168,19 +150,15 @@ function Dashboard() {
       {section === 'scope' && <DataScopePage companies={scopeQueries.companies} securities={scopeQueries.securities}/>}
 
       {section === 'quality' && <>
-        <Tabs value={qualityTab} onChange={setQualityTab} items={[['validation', 'Kiểm tra & Vi phạm'], ['financial', 'Chất lượng BCTC'], ['lineage', 'Truy vết nguồn (Lineage)']]}/>
+        <Tabs value={qualityTab} onChange={setQualityTab} items={[['validation', 'Kết quả kiểm tra'], ['financial', 'Chất lượng BCTC']]}/>
         {qualityTab === 'validation' ? (
           <>
             <div className="management-toolbar">
-              <div className="header-actions"><button className="light-button" onClick={() => setOperation({ kind: 'validate-pending' })}>Validate dữ liệu chờ</button></div>
-                </div>
+              <button className="light-button" onClick={() => setOperation({ kind: 'validate-pending' })}>Validate dữ liệu chờ</button>
+            </div>
             <DataQualityPage key={`${qualityRun}-${qualityRaw}-${qualityView}`} initialTab={qualityView} rawFilter={qualityRaw} onRaw={setRawId} openIssues={issues} results={results} versions={versions} rules={q.rules} onSelect={setIssue} onRun={setRunId} runFilter={qualityRun} clearRunFilter={() => { setQualityRun(null); setQualityRaw(null); }}/>
           </>
-        ) : qualityTab === 'financial' ? (
-          <FinancialQualityPage />
-        ) : (
-          <LineageTracerPage onRun={setRunId} onRaw={setRawId}/>
-        )}
+        ) : <FinancialQualityPage/>}
       </>}
 
       {section === 'ai' && <AiOperationsPage onRun={setRunId}/>}
@@ -188,7 +166,7 @@ function Dashboard() {
 
       {section === 'system' && <>
         <Tabs value={systemTab} onChange={setSystemTab} items={[['status', 'Kết nối'], ['coverage', 'Độ phủ dữ liệu'], ['market', 'Dữ liệu thị trường'], ['api', 'Danh mục & tài liệu API']]}/>
-        {systemTab === 'status' ? <RuntimePage/> : systemTab === 'coverage' ? <CoverageRemediationPanel onWorkflow={openWorkflow}/> : systemTab === 'market' ? <MarketDataAdminPage/> : <CatalogMaintenancePanel/>}
+        {systemTab === 'status' ? <RuntimePage javaLoading={health.isPending} javaUp={health.isSuccess && health.data?.data.status === 'UP'}/> : systemTab === 'coverage' ? <CoverageRemediationPanel onWorkflow={openWorkflow}/> : systemTab === 'market' ? <MarketDataAdminPage/> : <CatalogMaintenancePanel/>}
       </>}
     </div>
     <RunDrawer onLinkedRun={setRunId} key={runId ?? 'none'} onOutput={openOutput} onProcess={id => openWorkflow({ mode: 'PROCESS_RUN', runId: id })} onRaw={id => { setRunId(null); setRawId(id); }} onIssue={value => { setRunId(null); setIssue(value); }} id={runId} onClose={() => setRunId(null)} onOperation={setOperation} onJob={id => { setRunId(null); openJobs(id); }} onSource={id => { setRunId(null); openSources(id); }} onQuality={id => { setRunId(null); openQuality(id, null, 'validation'); }}/>

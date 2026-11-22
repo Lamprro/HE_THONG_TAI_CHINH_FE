@@ -72,8 +72,6 @@ export function DataScopePage({ companies, securities }: { companies: UseQueryRe
     )}
     <Panel
       title={tab === 'companies' ? 'Công ty' : 'Mã chứng khoán'}
-      eyebrow="PHẠM VI THU THẬP"
-      note="Tìm kiếm và lọc trên danh mục đã tải"
       action={
         tab === 'companies' ? (
           <button className="primary-button" onClick={() => openOperation({ kind: 'create-company' })}>Thêm công ty</button>

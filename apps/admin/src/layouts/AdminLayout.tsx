@@ -1,28 +1,44 @@
-import { Activity, Bot, BriefcaseBusiness, Building2, Database, LayoutDashboard, Moon, Search, ServerCog, ShieldCheck, Sun, Workflow } from 'lucide-react';
+import { useLayoutEffect, useRef, type ReactNode } from 'react';
+import { Activity, Bot, BriefcaseBusiness, Building2, LayoutDashboard, Moon, Search, ServerCog, ShieldCheck, Sun, Workflow } from 'lucide-react';
 
 export type Section = 'overview' | 'workflow' | 'history' | 'jobs' | 'scope' | 'quality' | 'ai' | 'data' | 'system';
-export const sections: { id: Section; title: string; group: 'Giám sát' | 'Vận hành'; icon: typeof Activity }[] = [
-  { id: 'overview', title: 'Tổng quan', group: 'Giám sát', icon: LayoutDashboard },
-  { id: 'history', title: 'Tác vụ & lịch sử', group: 'Giám sát', icon: Activity },
-  { id: 'data', title: 'Tra cứu dữ liệu', group: 'Giám sát', icon: Search },
-  { id: 'system', title: 'Hệ thống', group: 'Giám sát', icon: ServerCog },
-  { id: 'workflow', title: 'Luồng dữ liệu', group: 'Vận hành', icon: Workflow },
-  { id: 'jobs', title: 'Job & nguồn', group: 'Vận hành', icon: BriefcaseBusiness },
-  { id: 'scope', title: 'Danh mục mã', group: 'Vận hành', icon: Building2 },
-  { id: 'quality', title: 'Chất lượng dữ liệu', group: 'Vận hành', icon: ShieldCheck },
-  { id: 'ai', title: 'Vận hành AI', group: 'Vận hành', icon: Bot },
+export const sections: { id: Section; title: string; group: 'Dữ liệu' | 'Quản trị'; icon: typeof Activity }[] = [
+  { id: 'overview', title: 'Tổng quan', group: 'Dữ liệu', icon: LayoutDashboard },
+  { id: 'jobs', title: 'Job & nguồn', group: 'Dữ liệu', icon: BriefcaseBusiness },
+  { id: 'workflow', title: 'Luồng dữ liệu', group: 'Dữ liệu', icon: Workflow },
+  { id: 'history', title: 'Tác vụ & lịch sử', group: 'Dữ liệu', icon: Activity },
+  { id: 'quality', title: 'Chất lượng dữ liệu', group: 'Dữ liệu', icon: ShieldCheck },
+  { id: 'data', title: 'Tra cứu dữ liệu', group: 'Dữ liệu', icon: Search },
+  { id: 'scope', title: 'Danh mục mã', group: 'Quản trị', icon: Building2 },
+  { id: 'ai', title: 'Vận hành AI', group: 'Quản trị', icon: Bot },
+  { id: 'system', title: 'Hệ thống', group: 'Quản trị', icon: ServerCog },
 ];
 
-export function AdminLayout({ section, setSection, dark, setDark, children }: { section: Section; setSection: (section: Section) => void; dark: boolean; setDark: (value: boolean) => void; children: React.ReactNode }) {
-  return <div className={`shell ${dark ? 'dark' : ''}`}>
+export function AdminLayout({ section, setSection, dark, setDark, account, onLogout, children }: {
+  section: Section; setSection: (section: Section) => void; dark: boolean; setDark: (value: boolean) => void;
+  account: string; onLogout: () => void; children: ReactNode;
+}) {
+  const main = useRef<HTMLElement>(null);
+  useLayoutEffect(() => {
+    if (main.current) main.current.scrollTop = 0;
+  }, [section]);
+  const themeLabel = dark ? 'Giao diện sáng' : 'Giao diện tối';
+
+  return <div className={dark ? 'shell dark' : 'shell'}>
     <aside className="sidebar">
-      <div className="brand"><div className="brand-mark">T<span>B</span></div><div><strong>TOKEN BURNER</strong><small>ADMIN CONSOLE</small></div></div>
-      <nav aria-label="Main navigation">{(['Giám sát', 'Vận hành'] as const).map(group => <div key={group}>
-        <div className="nav-label">{group.toUpperCase()}</div>
-        {sections.filter(item => item.group === group).map(item => <button key={item.id} className={`nav-item ${section === item.id ? 'active' : ''}`} aria-current={section === item.id ? 'page' : undefined} onClick={() => setSection(item.id)}><item.icon size={17}/><span>{item.title}</span></button>)}
+      <div className="brand"><div className="brand-mark">TC</div><strong>Quản trị tài chính</strong></div>
+      <nav aria-label="Điều hướng quản trị">{(['Dữ liệu', 'Quản trị'] as const).map(group => <div className="nav-group" key={group}>
+        <div className="nav-label">{group}</div>
+        {sections.filter(item => item.group === group).map(item => <button key={item.id} className={section === item.id ? 'nav-item active' : 'nav-item'}
+          aria-label={item.title} title={item.title} aria-current={section === item.id ? 'page' : undefined} onClick={() => setSection(item.id)}>
+          <item.icon size={19} aria-hidden="true"/><span>{item.title}</span>
+        </button>)}
       </div>)}</nav>
-      <div className="sidebar-bottom"><button className="theme-button" onClick={() => setDark(!dark)}>{dark ? <Sun size={16}/> : <Moon size={16}/>} {dark ? 'Giao diện sáng' : 'Giao diện tối'}</button><div className="sidebar-foot"><Database size={12}/> Java API · nguồn qua Python</div></div>
+      <button className="theme-button" aria-label={themeLabel} title={themeLabel} onClick={() => setDark(!dark)}>
+        {dark ? <Sun size={17} aria-hidden="true"/> : <Moon size={17} aria-hidden="true"/>}<span>{themeLabel}</span>
+      </button>
     </aside>
-    <main className="main">{children}</main>
+    <header className="account-bar"><span title={account}>{account}</span><button className="text-button" onClick={onLogout}>Đăng xuất</button></header>
+    <main className="main" ref={main}>{children}</main>
   </div>;
 }

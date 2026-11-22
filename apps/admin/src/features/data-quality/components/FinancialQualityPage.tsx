@@ -74,8 +74,6 @@ export function FinancialQualityPage() {
     <div className="admin-stack">
       <Panel
         title="Chất lượng báo cáo tài chính"
-        eyebrow="FINANCIAL STATEMENT QUALITY"
-        note="Xem độ phủ báo cáo, rà soát dữ liệu lịch sử và tính lại chỉ số. Số liệu lệch giữa các nguồn được xử lý trong mục Phiên bản dữ liệu."
         action={
           <button
             className="text-button"

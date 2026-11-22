@@ -65,7 +65,7 @@ export function WorkflowPage({ initial = {}, onRun }: { initial?: WorkflowSelect
     } catch (cause) { setError(cause instanceof Error ? cause.message : 'Yêu cầu không hợp lệ.'); }
   };
   const execute = async () => { if (!review || sending.current) return; sending.current = true; try { await submit.mutateAsync(review); } catch { /* Same request key remains available. */ } finally { sending.current = false; } };
-  return <div className="admin-stack"><Panel title="Luồng xử lý dữ liệu" note="Lấy dữ liệu qua Python → kiểm tra bằng luật Java → build đúng batch vào bảng cuối. Không quét batch của công việc khác.">
+  return <div className="admin-stack"><Panel title="Luồng xử lý dữ liệu">
     <fieldset disabled={!!review || submit.isPending}><div className="admin-form-grid">
       <label>Cách xử lý<select aria-label="Cách xử lý" value={mode} onChange={e => setMode(e.target.value)}><option value="INGEST_VALIDATE_BUILD">Lấy nguồn → validation → build</option><option value="PROCESS_RUN">Tiếp tục từ nguồn đã lưu</option><option value="BUILD_VERSION">Build một version đã qua validation</option><option value="RUN_JOB">Chạy workflow/job đang cấu hình</option><option value="REPLAY_RUN">Lấy lại nguồn theo yêu cầu gốc (không build)</option></select></label>
       {mode === 'INGEST_VALIDATE_BUILD' && <>
