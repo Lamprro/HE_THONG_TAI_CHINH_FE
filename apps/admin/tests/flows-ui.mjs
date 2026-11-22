@@ -97,10 +97,7 @@ try{
   assert.equal(writes.find(w=>w.path.endsWith('/data-versions/'+pendingVersion.id+'/review')).body.accept,true);
   await page.setViewportSize({ width: 1440, height: 1000 });
   await button('Chất lượng dữ liệu').click();
-  await button('Chất lượng BCTC').click();
-  await page.getByText('Thiếu đơn vị hoặc loại tiền',{exact:true}).waitFor();
-  assert.equal(await page.getByRole('tab',{name:/Tài liệu công bố|Bindings/}).count(),0);
-  await page.getByRole('tab',{name:'Tính lại chỉ số tài chính'}).click();
-  await button('Bắt đầu tính toán lại chỉ số').waitFor();
+  await page.getByRole('tab', { name: 'Luật validation' }).waitFor();
+  assert.equal(await button('Chất lượng BCTC').count(), 0);
   console.log('FULL FLOWS UI PASS: typed canonical pipeline, queued cancellation, reviewed retry, issue note, forecast eligibility gate, recovery approval separated from analysis, immutable prompt version/promotion, mobile and no credential persistence. All APIs intercepted; no real provider, AI or business DB writes.');
 }finally{await browser.close();await new Promise(r=>server.close(r));}

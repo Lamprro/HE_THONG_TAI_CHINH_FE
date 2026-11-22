@@ -20,7 +20,6 @@ import { DataBrowser } from '../features/admin/DataBrowser';
 import { CatalogMaintenancePanel } from '../features/admin/CatalogMaintenancePanel';
 import { CoverageRemediationPanel } from '../features/admin/CoverageRemediationPanel';
 import { RuntimePage } from '../features/admin/RuntimePage';
-import { FinancialQualityPage } from '../features/data-quality/components/FinancialQualityPage';
 import { MarketDataAdminPage } from '../features/admin/MarketDataAdminPage';
 import { WorkflowPage, type WorkflowSelection } from '../features/admin/WorkflowPage';
 import { AiOperationsPage } from '../features/admin/AiOperationsPage';
@@ -51,7 +50,6 @@ function Dashboard({ session, onLogout, logoutPending, logoutError }: {
   const [dataSelection, setDataSelection] = useState<DataSelection>();
   const [dataOrigin, setDataOrigin] = useState<{ section: Section; runId: string | null; rawId: string | null }>();
   const [jobsTab, setJobsTab] = useState<'jobs' | 'sources'>('jobs');
-  const [qualityTab, setQualityTab] = useState<'validation' | 'financial'>('validation');
   const [systemTab, setSystemTab] = useState<'status' | 'coverage' | 'market' | 'api'>('status');
   const [dark, setDark] = useState(false);
   const [runId, setRunId] = useState<string | null>(null);
@@ -82,7 +80,7 @@ function Dashboard({ session, onLogout, logoutPending, logoutError }: {
   const current = sections.find(item => item.id === section)!;
   const openJobs = (id?: string) => { setJobLink(id ?? null); setJobsTab('jobs'); setSection('jobs'); };
   const openSources = (id?: number) => { setSourceLink(id ?? null); setJobsTab('sources'); setSection('jobs'); };
-  const openQuality = (run: string | null, raw: string | null, tab: 'validation' | 'versions') => { setQualityRun(run); setQualityRaw(raw); setQualityView(tab); setQualityTab('validation'); setSection('quality'); };
+  const openQuality = (run: string | null, raw: string | null, tab: 'validation' | 'versions') => { setQualityRun(run); setQualityRaw(raw); setQualityView(tab); setSection('quality'); };
   const openHistory = (jobId?: string) => { setHistoryJob(jobId); setHistoryKind('runs'); setSection('history'); };
   const openOutput = (selection: DataSelection) => {
     setDataOrigin({ section, runId, rawId });
@@ -154,15 +152,10 @@ function Dashboard({ session, onLogout, logoutPending, logoutError }: {
       {section === 'scope' && <DataScopePage companies={scopeQueries.companies} securities={scopeQueries.securities}/>}
 
       {section === 'quality' && <>
-        <Tabs value={qualityTab} onChange={setQualityTab} items={[['validation', 'Kết quả kiểm tra'], ['financial', 'Chất lượng BCTC']]}/>
-        {qualityTab === 'validation' ? (
-          <>
-            <div className="management-toolbar">
-              <button className="light-button" onClick={() => setOperation({ kind: 'validate-pending' })}>Validate dữ liệu chờ</button>
-            </div>
-            <DataQualityPage key={`${qualityRun}-${qualityRaw}-${qualityView}`} initialTab={qualityView} rawFilter={qualityRaw} onRaw={setRawId} openIssues={issues} results={results} versions={versions} rules={q.rules} onSelect={setIssue} onRun={setRunId} runFilter={qualityRun} clearRunFilter={() => { setQualityRun(null); setQualityRaw(null); }}/>
-          </>
-        ) : <FinancialQualityPage/>}
+        <div className="management-toolbar">
+          <button className="light-button" onClick={() => setOperation({ kind: 'validate-pending' })}>Validate dữ liệu chờ</button>
+        </div>
+        <DataQualityPage key={`${qualityRun}-${qualityRaw}-${qualityView}`} initialTab={qualityView} rawFilter={qualityRaw} onRaw={setRawId} openIssues={issues} results={results} versions={versions} rules={q.rules} onSelect={setIssue} onRun={setRunId} runFilter={qualityRun} clearRunFilter={() => { setQualityRun(null); setQualityRaw(null); }}/>
       </>}
 
       {section === 'ai' && <AiOperationsPage onRun={setRunId}/>}
