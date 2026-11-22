@@ -4,12 +4,14 @@ import { API_BASE, ApiError, getJson, postJson, setApiBase } from './client';
 import { installAuthIntegration } from './access';
 import type { AdminLogin, AdminSession } from './admin-contract';
 
-export function SessionGate({ children }: { children: (session: AdminSession, logout: () => void) => ReactNode }) {
+export function SessionGate({ children }: { children: (session: AdminSession, logout: () => void, logoutPending: boolean, logoutError: string) => ReactNode }) {
   const [session, setSession] = useState<AdminSession>();
   const [username, setUsername] = useState('');
   const [password, setPassword] = useState('');
   const [error, setError] = useState('');
   const [busy, setBusy] = useState(false);
+  const [logoutPending, setLogoutPending] = useState(false);
+  const [logoutError, setLogoutError] = useState('');
   const client = useQueryClient();
 
   const disconnect = (notice = '') => {
@@ -17,6 +19,7 @@ export function SessionGate({ children }: { children: (session: AdminSession, lo
     setPassword('');
     setSession(undefined);
     setError(notice);
+    setLogoutError('');
     client.clear();
   };
 
@@ -52,7 +55,26 @@ export function SessionGate({ children }: { children: (session: AdminSession, lo
     }
   };
 
-  if (session) return <>{children(session, () => disconnect())}</>;
+  const logout = async () => {
+    setLogoutPending(true);
+    setLogoutError('');
+    try {
+      await postJson<void>(API_BASE, '/api/auth/logout');
+      disconnect();
+    } catch (cause) {
+      if (cause instanceof ApiError && cause.status === 401) {
+        disconnect();
+      } else if (cause instanceof ApiError && cause.status === 404) {
+        disconnect('Đã thoát trên trình duyệt. Phiên trên máy chủ chưa được thu hồi.');
+      } else {
+        setLogoutError('Chưa thể đăng xuất. Hãy thử lại.');
+      }
+    } finally {
+      setLogoutPending(false);
+    }
+  };
+
+  if (session) return <>{children(session, logout, logoutPending, logoutError)}</>;
 
   return <main className="connect-page">
     <form className="panel connect-card" onSubmit={event => { event.preventDefault(); if (!busy) void connect(); }}>

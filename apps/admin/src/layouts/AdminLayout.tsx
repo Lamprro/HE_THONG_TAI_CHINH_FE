@@ -14,9 +14,9 @@ export const sections: { id: Section; title: string; group: 'Dữ liệu' | 'Qu�
   { id: 'system', title: 'Hệ thống', group: 'Quản trị', icon: ServerCog },
 ];
 
-export function AdminLayout({ section, setSection, dark, setDark, account, onLogout, children }: {
+export function AdminLayout({ section, setSection, dark, setDark, account, onLogout, logoutPending, children }: {
   section: Section; setSection: (section: Section) => void; dark: boolean; setDark: (value: boolean) => void;
-  account: string; onLogout: () => void; children: ReactNode;
+  account: string; onLogout: () => void; logoutPending: boolean; children: ReactNode;
 }) {
   const main = useRef<HTMLElement>(null);
   useLayoutEffect(() => {
@@ -38,7 +38,7 @@ export function AdminLayout({ section, setSection, dark, setDark, account, onLog
         {dark ? <Sun size={17} aria-hidden="true"/> : <Moon size={17} aria-hidden="true"/>}<span>{themeLabel}</span>
       </button>
     </aside>
-    <header className="account-bar"><span title={account}>{account}</span><button className="text-button" onClick={onLogout}>Đăng xuất</button></header>
+    <header className="account-bar"><span title={account}>{account}</span><button className="text-button" disabled={logoutPending} onClick={onLogout}>{logoutPending ? 'Đang đăng xuất…' : 'Đăng xuất'}</button></header>
     <main className="main" ref={main}>{children}</main>
   </div>;
 }

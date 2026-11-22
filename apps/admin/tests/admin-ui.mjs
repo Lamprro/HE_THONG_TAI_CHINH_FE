@@ -20,7 +20,7 @@ const token = 'fixture.jwt.admin';
 const username = 'fixture-admin', password = 'fixture-password';
 const job = { id: '00000000-0000-0000-0000-000000000001', code: 'MARKET_PRICE_BUILD', name: 'Build canonical prices', datasetType: 'MARKET_PRICE', dataSourceCode: 'VN', dataSourceId: 1, active: false, maxRetries: 10, timeoutSeconds: 120, parameters: {}, createdAt: '2026-10-19T00:00:00Z' };
 const commandId = '00000000-0000-0000-0000-000000000002';
-let command, polls = 0, pythonDetailsRequests = 0;
+let command, polls = 0, pythonDetailsRequests = 0, logoutAttempts = 0;
 page.on('pageerror', e => errors.push(e.message));
 await page.route('**/api/**', async route => {
   const request = route.request(), url = new URL(request.url()), path = url.pathname;
@@ -34,6 +34,12 @@ await page.route('**/api/**', async route => {
     return reply({ accessToken: token, tokenType: 'Bearer', expiresAt: new Date(Date.now() + 900000).toISOString() });
   }
   if (path !== '/api/health' && request.headers().authorization !== `Bearer ${token}`) return reply({ message: 'Admin credential required' }, 403);
+  if (path === '/api/auth/logout' && request.method() === 'POST') {
+    logoutAttempts++;
+    if (logoutAttempts === 1) return reply({ message: 'Unavailable' }, 503);
+    if (logoutAttempts === 3) return reply({}, 404);
+    return route.fulfill({ status: 204, headers: { 'Access-Control-Allow-Origin': '*' } });
+  }
   if (request.method() !== 'GET') {
     const body = request.postDataJSON(); writes.push({ path, method: request.method(), body });
     if (path === '/api/admin/console/commands') { command = { id: commandId, status: 'QUEUED', ...body }; return reply(command, 202); }
@@ -100,8 +106,17 @@ try {
   assert.equal(writes.length, 2); assert.equal(writes[1].path, '/api/admin/catalog/master-data/seed');
   assert.equal(await page.evaluate(() => localStorage.length + sessionStorage.length), 0);
   await page.setViewportSize({ width: 390, height: 844 }); assert.equal(await page.evaluate(() => document.documentElement.scrollWidth <= innerWidth), true);
-  await button('Đăng xuất').click(); await page.getByRole('heading', { name: 'Đăng nhập quản trị' }).waitFor();
+  await button('Đăng xuất').click();
+  await page.getByText('Chưa thể đăng xuất. Hãy thử lại.', { exact: true }).waitFor();
+  await button('Đăng xuất').click();
+  await page.getByRole('heading', { name: 'Đăng nhập quản trị' }).waitFor();
+  assert.equal(logoutAttempts, 2);
   assert.equal(await page.getByLabel('Mật khẩu').inputValue(), '');
+  await page.getByLabel('Mật khẩu').fill(password);
+  await button('Đăng nhập').click();
+  await button('Đăng xuất').click();
+  await page.getByText('Đã thoát trên trình duyệt. Phiên trên máy chủ chưa được thu hồi.', { exact: true }).waitFor();
+  assert.equal(logoutAttempts, 3);
   assert.deepEqual(errors, []);
   console.log('ADMIN UI PASS: denied login, token-only memory, disabled-job command, double-submit guard, polling, exact decimals, pagination, error details, explicit catalog action, mobile and logout. All API responses are intercepted fixtures; no provider/LLM/database writes.');
 } finally { await browser.close(); await new Promise(r => server.close(r)); }

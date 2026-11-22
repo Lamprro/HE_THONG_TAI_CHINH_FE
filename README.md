@@ -53,7 +53,7 @@ Migration checks on 2026-11-20: both production builds passed, admin unit tests 
 - Admin: https://he-thong-tai-chinh-admin.vercel.app
 - Backend origin: https://hardened-taekwondo-likewise.ngrok-free.dev
 
-Both Vercel projects belong to CEMENT_CODERS and track this repository's main branch, with roots apps/user and apps/admin respectively. VITE_API_BASE_URL is configured on Vercel for Production and Preview. Local development configuration remains separate. Admin users sign in with a username and password. The backend issues a short-lived JWT that the dashboard holds in memory.
+Both Vercel projects belong to CEMENT_CODERS and track this repository's main branch, with roots apps/user and apps/admin respectively. VITE_API_BASE_URL is configured on Vercel for Production and Preview. Local development configuration remains separate. Admin users sign in with a username and password. The backend issues a 24-hour JWT that the dashboard holds in memory. Signing out revokes the current token through Java.
 
 Verification: backend build 4ea75d1 returned health/live and database UP; the read-only user smoke suite passed 38 routes / 60 requests with no model calls or business writes. CORS preflights passed for both production origins, including admin authorization/content-type headers. The deployed user site's market table and FPT financial detail displayed real backend records. Admin login rendered with the correct remote backend URL; an authenticated admin browser session was not exercised in this deployment check.
 

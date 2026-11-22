@@ -55,7 +55,7 @@ Default Java origin: http://localhost:8080. API errors stay visible; the applica
 
 ## Admin operations
 
-Sign in to Java with an Admin username and password. Java reads the role from the account and issues a 15-minute JWT, which the dashboard keeps in memory. `VITE_API_BASE_URL` points only to Java and must never contain credentials. Jobs includes inactive definitions and reviewed edit/enable/one-off actions.
+Sign in to Java with an Admin username and password. Java reads the role from the account and issues a new 24-hour JWT on each successful sign-in. The dashboard keeps the token in memory and revokes it through Java on sign-out. `VITE_API_BASE_URL` points only to Java and must never contain credentials. Jobs includes inactive definitions and reviewed edit/enable/one-off actions.
 
 Structured data workflows run source → validation → selected-version canonical build, or resume a saved source. Durable commands expose progress, native diagnostics, queued cancellation and reviewed retries. Dedicated AI screens expose forecast preview, NEWS, recovery review/analysis and immutable prompt versions. Admin history, audit, exact data filters and scoped scheduling supplement the native API catalog. Scheduling defaults off. See [October 20 workflow report](docs/ADMIN_FLOWS_20261020.md) for actual evidence and boundaries.
 

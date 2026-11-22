@@ -38,9 +38,12 @@ function Tabs<T extends string>({ value, onChange, items }: { value: T; onChange
 }
 
 export function App() {
-  return <SessionGate>{(session, onLogout) => <Dashboard session={session} onLogout={onLogout}/>}</SessionGate>;
+  return <SessionGate>{(session, onLogout, logoutPending, logoutError) =>
+    <Dashboard session={session} onLogout={onLogout} logoutPending={logoutPending} logoutError={logoutError}/>}</SessionGate>;
 }
-function Dashboard({ session, onLogout }: { session: AdminSession; onLogout: () => void }) {
+function Dashboard({ session, onLogout, logoutPending, logoutError }: {
+  session: AdminSession; onLogout: () => void; logoutPending: boolean; logoutError: string;
+}) {
   const [section, setSection] = useState<Section>('overview');
   const [workflow, setWorkflow] = useState<WorkflowSelection>({});
   const [historyKind, setHistoryKind] = useState<HistoryKind>('runs');
@@ -103,7 +106,7 @@ function Dashboard({ session, onLogout }: { session: AdminSession; onLogout: () 
   const openWorkflow = (selection: WorkflowSelection) => { setWorkflow(selection); setSection('workflow'); };
 
   return <AdminLayout section={section} setSection={navigate} dark={dark} setDark={setDark}
-    account={session.email ?? session.principal} onLogout={onLogout}>
+    account={session.email ?? session.principal} onLogout={onLogout} logoutPending={logoutPending}>
     <div className="content">
       <header className="page-header">
         <h1>{current.title}</h1>
@@ -113,6 +116,7 @@ function Dashboard({ session, onLogout }: { session: AdminSession; onLogout: () 
           </button>
         </div>
       </header>
+      {logoutError && <p className="state-error" role="alert">{logoutError}</p>}
       {connection && section !== 'system' && <div className="page-connection" role="status">
         <Badge tone={health.isPending ? 'neutral' : 'red'}>{connection}</Badge>
       </div>}
