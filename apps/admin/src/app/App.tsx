@@ -150,7 +150,7 @@ function Dashboard() {
       {section === 'scope' && <DataScopePage companies={scopeQueries.companies} securities={scopeQueries.securities}/>}
 
       {section === 'quality' && <>
-        <Tabs value={qualityTab} onChange={setQualityTab} items={[['validation', 'Kiểm tra & Vi phạm'], ['financial', 'Chất lượng BCTC & Công bố'], ['lineage', 'Truy vết nguồn (Lineage)']]}/>
+        <Tabs value={qualityTab} onChange={setQualityTab} items={[['validation', 'Kiểm tra & Vi phạm'], ['financial', 'Chất lượng BCTC'], ['lineage', 'Truy vết nguồn (Lineage)']]}/>
         {qualityTab === 'validation' ? (
           <>
             <div className="management-toolbar">
