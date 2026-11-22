@@ -56,6 +56,10 @@ try{
   await button('Luồng dữ liệu').click();await page.getByLabel('Nguồn dữ liệu',{exact:true}).selectOption('VN');await page.getByLabel('Mã chứng khoán/chỉ số',{exact:true}).fill('FPT');await page.getByLabel('Từ ngày',{exact:true}).fill('2026-10-01');await page.getByLabel('Đến ngày',{exact:true}).fill('2026-10-16');await page.getByLabel('Lý do xử lý',{exact:true}).fill('Reviewed source range');await button('Kiểm tra phạm vi').click();await button('Xác nhận chạy luồng').click();await page.getByText('Kết quả nghiệp vụ: ACTIVATED',{exact:true}).waitFor();assert.equal(writes[0].body.action,'INGEST_VALIDATE_BUILD');assert.equal(writes[0].body.input.symbol,'FPT');
   await button('Tác vụ & lịch sử').click();await button('Tác vụ nền').click();await button('Theo dõi / xử lý').click();await button('Hủy tác vụ đang chờ').click();await page.getByLabel('Lý do xác nhận',{exact:true}).fill('Cancel queued fixture');await button('Xác nhận xử lý tác vụ').click();await button('Kiểm tra và gửi lại').waitFor();await button('Kiểm tra và gửi lại').click();await page.getByLabel('Lý do xác nhận',{exact:true}).fill('Reviewed original result, retry');await button('Xác nhận xử lý tác vụ').click();await page.getByText('Source quota 429',{exact:true}).waitFor();assert.equal(writes.find(w=>w.path.endsWith('/retry')).body.reviewed,true);
   await button('Kiểm tra & ghi dữ liệu').click();await page.getByLabel('Trạng thái',{exact:true}).selectOption('FAIL');
+  assert.equal(await page.getByRole('option', { name: 'Luật kiểm tra', exact: true }).count(), 0);
+  const filterBounds = await page.getByLabel('Trạng thái', { exact: true }).boundingBox();
+  const buttonBounds = await button('Lọc lịch sử').boundingBox();
+  assert.ok(Math.abs(filterBounds.y + filterBounds.height - buttonBounds.y - buttonBounds.height) <= 1);
   await Promise.all([
     page.waitForRequest(request => new URL(request.url()).searchParams.get('status') === 'FAIL'),
     button('Lọc lịch sử').click(),

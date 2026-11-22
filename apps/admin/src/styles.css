@@ -178,3 +178,8 @@
 
 .run-stage-heading { display: flex; align-items: baseline; justify-content: space-between; flex-wrap: wrap; gap: 4px 12px; }
 .run-version .light-button { max-width: 100%; white-space: normal; text-align: left; }
+
+.ledger-filters > label, .admin-stack .ledger-filters > label { margin: 0; }
+.ledger-filters .ledger-actions > button { min-height: 38px; }
+.ledger-pager > label, .admin-stack .ledger-pager > label { display: flex; align-items: center; gap: 6px; margin: 0; }
+.ledger-pager select, .admin-stack .ledger-pager select { width: auto; padding: 6px; color: var(--text); background: var(--panel); border: 1px solid var(--line); border-radius: 6px; }

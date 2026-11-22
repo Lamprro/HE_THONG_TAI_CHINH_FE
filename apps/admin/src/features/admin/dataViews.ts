@@ -78,11 +78,20 @@ export const jobStage = (job: IngestionJob) => {
   return code.endsWith('_BUILD') || code === 'NEWS_DATA_FETCH' ? 'processing' : 'source';
 };
 
-export function useAdminRows(table: string, page: number, filter: string, options: { enabled?: boolean; refetchInterval?: number } = {}) {
+export async function fetchAdminPage<T>(page: number, size: number, fetchPage: (page: number, size: number) => Promise<{ rows: T[]; total: number }>) {
+  const limit = Math.min(size, 100);
+  const start = page * (size / limit);
+  const first = await fetchPage(start, limit);
+  const remaining = Math.min(size / limit - 1, Math.max(0, Math.ceil(first.total / limit) - start - 1));
+  const extra = await Promise.all(Array.from({ length: remaining }, (_, i) => fetchPage(start + i + 1, limit)));
+  return { rows: first.rows.concat(extra.flatMap(result => result.rows)), total: first.total };
+}
+
+export function useAdminRows(table: string, page: number, size: number, filter: string, options: { enabled?: boolean; refetchInterval?: number } = {}) {
   return useQuery({
-    queryKey: ['admin-rows', table, page, filter],
-    queryFn: () => getJson<{ rows: Row[]; total: number }>(API_BASE,
-      `/api/admin/console/data/${table}?page=${page}&size=25${filter ? `&${filter}` : ''}`),
+    queryKey: ['admin-rows', table, page, size, filter],
+    queryFn: () => fetchAdminPage(page, size, (offset, limit) => getJson<{ rows: Row[]; total: number }>(API_BASE,
+      `/api/admin/console/data/${table}?page=${offset}&size=${limit}${filter ? `&${filter}` : ''}`)),
     enabled: options.enabled, refetchInterval: options.refetchInterval,
   });
 }

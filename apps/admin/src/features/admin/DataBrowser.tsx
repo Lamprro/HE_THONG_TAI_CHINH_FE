@@ -1,3 +1,4 @@
+import { Pagination, usePagination } from '../../shared/components/Pagination';
 import { useState } from 'react';
 import { useQuery } from '@tanstack/react-query';
 import { API_BASE, getJson } from '../../shared/api/client';
@@ -19,7 +20,7 @@ export function DataBrowser({ initial, onRun, onRaw, onBack }: {
   initial?: DataSelection; onBack?: () => void; onRun: (id: string) => void; onRaw: (id: string) => void;
 }) {
   const [table, setTable] = useState(initial?.table ?? 'market_prices');
-  const [page, setPage] = useState(0);
+  const { page, size, setPage, changeSize } = usePagination();
   const [report, setReport] = useState<{ id: string; symbol: string }>();
   const [search, setSearch] = useState('');
   const [run, setRun] = useState('');
@@ -35,7 +36,7 @@ export function DataBrowser({ initial, onRun, onRaw, onBack }: {
   const hasRun = selected?.columns.includes('ingestion_run_id');
   const statuses = tableStatuses[table];
   const exactKeys = selected?.exactFilters ?? fallbackExact.filter(key => selected?.columns.includes(key));
-  const data = useAdminRows(table, page, filter, { enabled: !!selected });
+  const data = useAdminRows(table, page, size, filter, { enabled: !!selected });
   const total = data.data?.total ?? 0;
 
   const reset = () => {
@@ -92,16 +93,12 @@ export function DataBrowser({ initial, onRun, onRaw, onBack }: {
         {new URLSearchParams(filter).get('data_version_id') && <span className="break">Phiên bản {new URLSearchParams(filter).get('data_version_id')}</span>}
         {new URLSearchParams(filter).get('raw_payload_id') && <span className="break">Raw {new URLSearchParams(filter).get('raw_payload_id')}</span>}
       </div>
-      <Records key={`${table}-${page}-${filter}`} rows={data.data?.rows ?? []} onRun={onRun} onRaw={onRaw}
+      <Records serverPaged key={`${table}-${page}-${filter}`} rows={data.data?.rows ?? []} onRun={onRun} onRaw={onRaw}
         actions={row => table === 'financial_statements' && row.is_canonical === true && row.is_current === true
           && typeof row.id === 'string' && typeof row.symbol === 'string'
           ? <button className="text-button" onClick={() => setReport({ id: String(row.id), symbol: String(row.symbol) })}>
               Xem chỉ tiêu</button> : null}/>
-      <div className="toolbar ledger-pager">
-        <span>{total.toLocaleString('vi-VN')} bản ghi · Trang {page + 1}</span>
-        <button className="light-button" disabled={!page || data.isFetching} onClick={() => setPage(previous => previous - 1)}>Trang trước</button>
-        <button className="light-button" disabled={(page + 1) * 25 >= total || data.isFetching} onClick={() => setPage(previous => previous + 1)}>Trang sau</button>
-      </div>
+      <Pagination page={page} size={size} total={total} onPage={setPage} onSize={changeSize} busy={data.isFetching}/>
     </QueryState>}
     {report && <StatementItems {...report} onClose={() => setReport(undefined)}/>}
   </Panel>;

@@ -1,3 +1,4 @@
+import { PaginatedTable, Pagination, usePagination } from '../../../shared/components/Pagination';
 import type { Operation } from '../../operations/OperationDrawer';
 import { useMemo, useState } from 'react';
 import { ArrowDownUp, ArrowUpRight, ChevronRight, Copy, RefreshCw } from 'lucide-react';
@@ -91,7 +92,7 @@ export function RunsPanel({ runs, jobs, sources, onSelect, compact = false, onVi
   const visible = compact ? rows.slice(0, 6) : rows;
   return <Panel title={compact ? 'Lượt chạy gần đây' : 'Lượt chạy nguồn'} note={compact ? '20 lượt mới nhất · hiển thị tối đa 6' : '20 lượt mới nhất · tìm kiếm, sắp xếp và lọc chỉ áp dụng trên 20 lượt này'} action={compact ? <button className="text-button" onClick={onViewAll}>Xem tất cả <ArrowUpRight size={14}/></button> : <button className="text-button" disabled={runs.isFetching} onClick={() => runs.refetch()}><RefreshCw size={14}/>{runs.isFetching ? 'Đang tải…' : 'Tải lại'}</button>}>
     {!compact && <div className="toolbar filters"><label>Tìm kiếm <input value={search} onChange={event => setSearch(event.target.value)} placeholder="Job, nguồn hoặc run ID"/></label><label>Trạng thái <select value={status} onChange={event => setStatus(event.target.value)}>{statuses.map(value => <option key={value} value={value}>{value === 'ALL' ? 'Tất cả trạng thái' : value}</option>)}</select></label><button className="light-button" onClick={() => setDescending(!descending)}><ArrowDownUp size={14}/> {descending ? 'Mới nhất trước' : 'Cũ nhất trước'}</button><span className="subtle">{runs.data ? `${rows.length} / ${runs.data.length} lượt` : '—'}</span></div>}
-    <QueryState query={runs} empty="Chưa có lượt chạy nào."><div className="table-scroll"><table><thead><tr><th>Job / Nguồn</th><th>Trạng thái</th>{!compact && <th>Kích hoạt</th>}<th>Bắt đầu</th><th>Thời lượng</th><th>Đã lấy</th>{!compact && <th>Thêm mới</th>}<th>Lỗi</th><th></th></tr></thead><tbody>{visible.map(run => { const job = jobs?.find(item => item.id === run.ingestionJobId); const source = sources?.find(item => item.id === run.dataSourceId); return <tr key={run.id} tabIndex={0} onClick={() => onSelect(run.id)} onKeyDown={event => event.key === 'Enter' && onSelect(run.id)}><td><strong>{job?.name || run.ingestionJobId || 'Không có job'}</strong><small>{source?.name || `Nguồn #${run.dataSourceId}`}</small></td><td><Badge tone={statusTone(run.status)}>{run.status}</Badge></td>{!compact && <td>{run.triggerType}</td>}<td>{dateTime(run.startedAt)}</td><td>{duration(run.startedAt, run.finishedAt)}</td><td>{run.fetchedCount}</td>{!compact && <td>{run.insertedCount}</td>}<td>{run.errorCount}</td><td><ChevronRight size={16}/></td></tr>; })}</tbody></table></div>{rows.length === 0 && <div className="state-empty">Không có lượt chạy khớp bộ lọc.</div>}</QueryState>
+    <QueryState query={runs} empty="Chưa có lượt chạy nào."><div className="table-scroll"><PaginatedTable><thead><tr><th>Job / Nguồn</th><th>Trạng thái</th>{!compact && <th>Kích hoạt</th>}<th>Bắt đầu</th><th>Thời lượng</th><th>Đã lấy</th>{!compact && <th>Thêm mới</th>}<th>Lỗi</th><th></th></tr></thead><tbody>{visible.map(run => { const job = jobs?.find(item => item.id === run.ingestionJobId); const source = sources?.find(item => item.id === run.dataSourceId); return <tr key={run.id} tabIndex={0} onClick={() => onSelect(run.id)} onKeyDown={event => event.key === 'Enter' && onSelect(run.id)}><td><strong>{job?.name || run.ingestionJobId || 'Không có job'}</strong><small>{source?.name || `Nguồn #${run.dataSourceId}`}</small></td><td><Badge tone={statusTone(run.status)}>{run.status}</Badge></td>{!compact && <td>{run.triggerType}</td>}<td>{dateTime(run.startedAt)}</td><td>{duration(run.startedAt, run.finishedAt)}</td><td>{run.fetchedCount}</td>{!compact && <td>{run.insertedCount}</td>}<td>{run.errorCount}</td><td><ChevronRight size={16}/></td></tr>; })}</tbody></PaginatedTable></div>{rows.length === 0 && <div className="state-empty">Không có lượt chạy khớp bộ lọc.</div>}</QueryState>
   </Panel>;
 }
 
@@ -103,7 +104,7 @@ export function JobRunHistory({ jobs, sources, initialJobId, onRun }: {
   const [scope, setScope] = useState<'all' | 'source' | 'processing'>('all');
   const [search, setSearch] = useState('');
   const [status, setStatus] = useState('');
-  const [page, setPage] = useState(0);
+  const { page, size, setPage, changeSize } = usePagination();
   const jobsById = useMemo(() => new Map(jobs.data?.map(job => [job.id, job])), [jobs.data]);
   const sourcesById = useMemo(() => new Map(sources?.map(source => [String(source.id), source.name])), [sources]);
   const term = search.trim().toLowerCase();
@@ -115,7 +116,7 @@ export function JobRunHistory({ jobs, sources, initialJobId, onRun }: {
   const params = new URLSearchParams();
   if (jobId) params.set('ingestion_job_id', jobId);
   if (status) params.set('status', status);
-  const history = useAdminRows('ingestion_runs', page, params.toString(), { enabled: ready });
+  const history = useAdminRows('ingestion_runs', page, size, params.toString(), { enabled: ready });
   const total = history.data?.total ?? 0;
 
   return <Panel title="Lịch sử job" action={<button className="text-button" disabled={!ready || history.isFetching} onClick={() => history.refetch()}>
@@ -157,10 +158,7 @@ export function JobRunHistory({ jobs, sources, initialJobId, onRun }: {
           </tr>;
         })}</tbody>
       </table></div> : <p className="state-empty">Không có lượt chạy phù hợp.</p>}
-      <div className="toolbar ledger-pager"><span>{total.toLocaleString('vi-VN')} lượt · Trang {page + 1}</span>
-        <button className="light-button" disabled={!page || history.isFetching} onClick={() => setPage(value => value - 1)}>Trang trước</button>
-        <button className="light-button" disabled={(page + 1) * 25 >= total || history.isFetching} onClick={() => setPage(value => value + 1)}>Trang sau</button>
-      </div>
+      <Pagination page={page} size={size} total={total} onPage={setPage} onSize={changeSize} busy={history.isFetching}/>
     </QueryState>}
   </Panel>;
 }

@@ -1,3 +1,5 @@
+import { Pagination, usePagination } from '../../shared/components/Pagination';
+import { fetchAdminPage } from './dataViews';
 import { useMemo, useState } from 'react';
 import { useQuery, useMutation, useQueryClient } from '@tanstack/react-query';
 import { Database, ExternalLink, Layers, PlayCircle, RefreshCw, Search, ShieldCheck } from 'lucide-react';
@@ -66,11 +68,27 @@ interface MarketPriceItem {
   [key: string]: unknown;
 }
 
+function useMarketPage<T>(path: string, pagination: ReturnType<typeof usePagination>, enabled = true) {
+  const { page, size } = pagination;
+  return useQuery({
+    queryKey: ['admin-market-table', path, page, size],
+    queryFn: () => fetchAdminPage<T>(page, size, async (offset, limit) => {
+      const result = await getJson<PageResponse<T>>(API_BASE, path + '?page=' + offset + '&size=' + limit);
+      return { rows: result.content, total: result.totalElements };
+    }).then(result => ({ content: result.rows, totalElements: result.total })),
+    enabled,
+    staleTime: 60000,
+  });
+}
+
 export function MarketDataAdminPage() {
   const [subTab, setSubTab] = useState<'indices' | 'prices'>('indices');
   const [selectedIndexCode, setSelectedIndexCode] = useState('VN30');
   const [stockSymbol, setStockSymbol] = useState('FPT');
-  const [pricePage, setPricePage] = useState(0);
+  const stockPagination = usePagination();
+  const indicesPagination = usePagination();
+  const indexPricePagination = usePagination();
+  const indexMembersPagination = usePagination();
   const [actionMessage, setActionMessage] = useState<string | null>(null);
 
   // Seed confirmation modals
@@ -85,11 +103,10 @@ export function MarketDataAdminPage() {
   const securitiesMapQuery = useQuery({
     queryKey: ['admin-securities-map-market-data'],
     queryFn: async () => {
-      const res = await getJson<{ rows?: Array<{ id: string; symbol: string; exchange: string }>; items?: Array<{ id: string; symbol: string; exchange: string }> }>(
-        API_BASE,
-        '/api/admin/console/data/securities?page=0&size=500'
-      ).catch(() => null);
-      const rows = res?.rows || res?.items || [];
+      const result = await fetchAdminPage(0, 500, (page, size) => getJson<{
+        rows: { id: string; symbol: string }[]; total: number;
+      }>(API_BASE, '/api/admin/console/data/securities?page=' + page + '&size=' + size));
+      const rows = result.rows;
       const map: Record<string, string> = {};
       rows.forEach(s => {
         if (s.id && s.symbol) map[s.id] = s.symbol;
@@ -99,40 +116,18 @@ export function MarketDataAdminPage() {
     staleTime: 5 * 60 * 1000,
   });
 
-  // Queries
-  const indicesQuery = useQuery({
-    queryKey: ['admin-market-indices'],
-    queryFn: () => getJson<PageResponse<MarketIndexItem>>(API_BASE, '/api/admin/market-indices?page=0&size=50'),
-    staleTime: 60000,
-  });
-
-  const indexPricesQuery = useQuery({
-    queryKey: ['admin-index-prices', selectedIndexCode],
-    queryFn: () => getJson<PageResponse<IndexPriceItem>>(API_BASE, `/api/admin/market-indices/${encodeURIComponent(selectedIndexCode)}/prices?page=0&size=30`),
-    staleTime: 60000,
-    enabled: subTab === 'indices' && !!selectedIndexCode,
-  });
-
-  const indexMembersQuery = useQuery({
-    queryKey: ['admin-index-members', selectedIndexCode],
-    queryFn: () => getJson<PageResponse<SecurityMembershipItem>>(API_BASE, `/api/admin/market-indices/${encodeURIComponent(selectedIndexCode)}/memberships?page=0&size=50`),
-    staleTime: 60000,
-    enabled: subTab === 'indices' && !!selectedIndexCode,
-  });
-
-  const securityPricesQuery = useQuery({
-    queryKey: ['admin-security-prices', stockSymbol, pricePage],
-    queryFn: () => getJson<PageResponse<MarketPriceItem>>(API_BASE, `/api/admin/market-prices/${encodeURIComponent(stockSymbol)}?page=${pricePage}&size=30`),
-    staleTime: 60000,
-    enabled: subTab === 'prices' && !!stockSymbol,
-  });
+  const indicesQuery = useMarketPage<MarketIndexItem>('/api/admin/market-indices', indicesPagination, subTab === 'indices');
+  const indexPath = '/api/admin/market-indices/' + encodeURIComponent(selectedIndexCode);
+  const indexPricesQuery = useMarketPage<IndexPriceItem>(indexPath + '/prices', indexPricePagination, subTab === 'indices' && !!selectedIndexCode);
+  const indexMembersQuery = useMarketPage<SecurityMembershipItem>(indexPath + '/memberships', indexMembersPagination, subTab === 'indices' && !!selectedIndexCode);
+  const securityPricesQuery = useMarketPage<MarketPriceItem>('/api/admin/market-prices/' + encodeURIComponent(stockSymbol), stockPagination, subTab === 'prices' && !!stockSymbol);
 
   // Mutations
   const seedIndicesMutation = useMutation({
     mutationFn: () => postJson(API_BASE, '/api/admin/market-indices/catalog/seed', {}),
     onSuccess: (res: any) => {
       setActionMessage(`Khởi tạo Index Jobs thành công. Số job tạo/cập nhật: ${res?.jobs ?? 'OK'}.`);
-      void queryClient.invalidateQueries({ queryKey: ['admin-market-indices'] });
+      void queryClient.invalidateQueries({ queryKey: ['admin-market-table', '/api/admin/market-indices'] });
     },
     onError: (err: Error) => {
       setActionMessage(`Lỗi khởi tạo Index Jobs: ${err.message}`);
@@ -248,7 +243,7 @@ export function MarketDataAdminPage() {
                         <td style={{ textAlign: 'right' }}>
                           <button
                             className={selectedIndexCode === idx.code ? 'primary-button' : 'light-button'}
-                            onClick={() => setSelectedIndexCode(idx.code)}
+                            onClick={() => { setSelectedIndexCode(idx.code); indexPricePagination.setPage(0); indexMembersPagination.setPage(0); }}
                           >
                             Xem giá &amp; rổ
                           </button>
@@ -258,6 +253,7 @@ export function MarketDataAdminPage() {
                   </tbody>
                 </table>
               </div>
+                <Pagination page={indicesPagination.page} size={indicesPagination.size} total={indicesQuery.data?.totalElements ?? 0} onPage={indicesPagination.setPage} onSize={indicesPagination.changeSize} busy={indicesQuery.isFetching}/>
             </QueryState>
 
             {selectedIndexCode && (
@@ -274,7 +270,7 @@ export function MarketDataAdminPage() {
                 <div style={{ display: 'grid', gridTemplateColumns: '1fr 1fr', gap: '1rem', marginTop: '0.5rem' }}>
                   {/* Prices */}
                   <div>
-                    <h5 style={{ margin: '0 0 0.5rem' }}>30 phiên gần nhất ({selectedIndexCode})</h5>
+                    <h5 style={{ margin: '0 0 0.5rem' }}>Giá đóng cửa ({selectedIndexCode})</h5>
                     <QueryState query={indexPricesQuery} empty="Chưa có dữ liệu giá cho chỉ số này.">
                       <div className="table-scroll" style={{ maxHeight: 300 }}>
                         <table>
@@ -301,6 +297,7 @@ export function MarketDataAdminPage() {
                           </tbody>
                         </table>
                       </div>
+                <Pagination page={indexPricePagination.page} size={indexPricePagination.size} total={indexPricesQuery.data?.totalElements ?? 0} onPage={indexPricePagination.setPage} onSize={indexPricePagination.changeSize} busy={indexPricesQuery.isFetching}/>
                     </QueryState>
                   </div>
 
@@ -336,6 +333,7 @@ export function MarketDataAdminPage() {
                           </tbody>
                         </table>
                       </div>
+                <Pagination page={indexMembersPagination.page} size={indexMembersPagination.size} total={indexMembersQuery.data?.totalElements ?? 0} onPage={indexMembersPagination.setPage} onSize={indexMembersPagination.changeSize} busy={indexMembersQuery.isFetching}/>
                     </QueryState>
                   </div>
                 </div>
@@ -355,7 +353,7 @@ export function MarketDataAdminPage() {
                   value={stockSymbol}
                   onChange={e => {
                     setStockSymbol(e.target.value.toUpperCase());
-                    setPricePage(0);
+                    stockPagination.setPage(0);
                   }}
                   style={{ width: '120px', padding: '0.35rem 0.6rem', fontWeight: 700 }}
                   placeholder="VD: FPT"
@@ -415,30 +413,8 @@ export function MarketDataAdminPage() {
                   </tbody>
                 </table>
               </div>
+                <Pagination page={stockPagination.page} size={stockPagination.size} total={securityPricesQuery.data?.totalElements ?? 0} onPage={stockPagination.setPage} onSize={stockPagination.changeSize} busy={securityPricesQuery.isFetching}/>
 
-              {securityPricesQuery.data && securityPricesQuery.data.totalPages > 1 && (
-                <div className="toolbar" style={{ marginTop: '0.75rem', justifyContent: 'space-between' }}>
-                  <span className="subtle">
-                    Trang {pricePage + 1} / {securityPricesQuery.data.totalPages} ({securityPricesQuery.data.totalElements} phiên)
-                  </span>
-                  <div style={{ display: 'flex', gap: '0.5rem' }}>
-                    <button
-                      className="light-button"
-                      disabled={pricePage === 0}
-                      onClick={() => setPricePage(p => Math.max(0, p - 1))}
-                    >
-                      Trang trước
-                    </button>
-                    <button
-                      className="light-button"
-                      disabled={pricePage >= securityPricesQuery.data.totalPages - 1}
-                      onClick={() => setPricePage(p => p + 1)}
-                    >
-                      Trang sau
-                    </button>
-                  </div>
-                </div>
-              )}
             </QueryState>
           </div>
         )}

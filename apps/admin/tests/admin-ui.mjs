@@ -66,6 +66,10 @@ await page.route('**/api/**', async route => {
     const rows = current && (!statuses || statuses.split(',').includes(current.status)) ? [current] : [];
     return reply({ rows, total: rows.length });
   }
+  if (path.endsWith('/data/ingestion_runs') && url.searchParams.get('size') === '100') {
+    const offset = Number(url.searchParams.get('page'));
+    return reply({ rows: [{ id: 'batch-' + offset, message: 'Batch ' + offset }], total: 501 });
+  }
   if (path.includes('/data/')) return reply({ rows: [{ id: 'row-1', status: 'FAILED', message: 'Source quota 429', value: '12345678901234567890.125', request_query_params: { symbol: 'FPT', operation: 'OHLCV', provider: 'vndirect' } }], total: 51, page: Number(url.searchParams.get('page')), size: 25 });
   return reply([]);
 });
@@ -85,6 +89,12 @@ try {
   await page.getByText('FPT', { exact: true }).waitFor(); await page.getByText('OHLCV', { exact: true }).waitFor();
   await button('Trang sau').click(); await page.getByText('51 bản ghi · Trang 2', { exact: true }).waitFor();
   await button('Chi tiết').click(); await page.getByRole('dialog').getByText('Source quota 429', { exact: true }).waitFor(); await button('Close').click();
+  await page.getByLabel('Bản ghi mỗi trang').selectOption('500');
+  await page.getByText('Batch 4', { exact: true }).waitFor();
+  await page.getByText('501 bản ghi · Trang 1', { exact: true }).waitFor();
+  await button('Trang sau').click();
+  await page.getByText('Batch 5', { exact: true }).waitFor();
+  assert.equal(await page.getByText('Batch 4', { exact: true }).count(), 0);
   await button('Hệ thống').click();
   const runtime = page.getByRole('heading', { name: 'Kết nối dịch vụ', exact: true }).locator('xpath=ancestor::section');
   await runtime.getByText('Đã kết nối', { exact: true }).nth(2).waitFor();

@@ -1,3 +1,4 @@
+import { PaginatedTable } from '../../shared/components/Pagination';
 import { useMemo, useState } from 'react';
 import { useQuery } from '@tanstack/react-query';
 import { AlertTriangle, CheckCircle2, Database, Filter, PlayCircle, RefreshCw, Search } from 'lucide-react';
@@ -271,7 +272,7 @@ export function CoverageRemediationPanel({ onWorkflow }: { onWorkflow?: (selecti
 
       <QueryState query={priceCoverage} empty="Chưa có dữ liệu độ phủ từ hệ thống.">
         <div className="table-scroll">
-          <table>
+          <PaginatedTable>
             <thead>
               <tr>
                 <th>Mã</th>
@@ -344,7 +345,7 @@ export function CoverageRemediationPanel({ onWorkflow }: { onWorkflow?: (selecti
                 </tr>
               ))}
             </tbody>
-          </table>
+          </PaginatedTable>
         </div>
       </QueryState>
 
@@ -354,7 +355,7 @@ export function CoverageRemediationPanel({ onWorkflow }: { onWorkflow?: (selecti
             <strong>Độ phủ chỉ số kinh tế vĩ mô ({macroCoverage.data.length} chuỗi)</strong>
           </summary>
           <div className="table-scroll" style={{ marginTop: '0.75rem' }}>
-            <table>
+            <PaginatedTable>
               <thead>
                 <tr>
                   <th>Mã chuỗi</th>
@@ -377,7 +378,7 @@ export function CoverageRemediationPanel({ onWorkflow }: { onWorkflow?: (selecti
                   </tr>
                 ))}
               </tbody>
-            </table>
+            </PaginatedTable>
           </div>
         </details>
       )}
