@@ -1,64 +1,45 @@
 import { useEffect, useRef } from 'react';
 import { useQuery, useQueryClient } from '@tanstack/react-query';
-import { Activity, ArrowRight, Loader2 } from 'lucide-react';
+import { Activity, ArrowRight } from 'lucide-react';
 import { API_BASE, getJson } from '../../shared/api/client';
-import type { Row } from './Records';
 
-export function ActiveCommandsBanner({ onSelectCommand }: { onSelectCommand: (id: string) => void }) {
+export function ActiveCommandsBanner({ onSelectCommand, onOpenHistory }: {
+  onSelectCommand: (id: string) => void; onOpenHistory: () => void;
+}) {
   const queryClient = useQueryClient();
-  const previousRunning = useRef<Set<string>>(new Set());
-
-  const query = useQuery({
+  const previous = useRef(new Set<string>());
+  const { data } = useQuery({
     queryKey: ['active-admin-commands'],
-    queryFn: () => getJson<{ rows: Row[]; total: number }>(API_BASE, '/api/admin/console/data/admin_commands?status=QUEUED,RUNNING&size=20'),
+    queryFn: () => getJson<{ rows: { id: string; status: 'QUEUED' | 'RUNNING' }[]; total: number }>(
+      API_BASE, '/api/admin/console/data/admin_commands?status=QUEUED,RUNNING&size=20',
+    ),
     refetchInterval: 3000,
     staleTime: 2000,
   });
 
-  const active = query.data?.rows || [];
-
+  const active = Array.isArray(data?.rows) ? data : undefined;
   useEffect(() => {
-    const currentRunning = new Set(active.map(r => String(r.id)));
-    // Check if any previously running command has finished
-    let hasFinished = false;
-    for (const id of previousRunning.current) {
-      if (!currentRunning.has(id)) {
-        hasFinished = true;
-        break;
-      }
+    if (!active) return;
+    const current = new Set(active.rows.map(row => row.id));
+    if ([...previous.current].some(id => !current.has(id))) {
+      void queryClient.invalidateQueries({ queryKey: ['system-summary'] });
+      void queryClient.invalidateQueries({ queryKey: ['admin-rows', 'admin_commands'] });
+      void queryClient.invalidateQueries({ queryKey: ['admin-rows', 'ingestion_runs'] });
+      void queryClient.invalidateQueries({ queryKey: ['runs'] });
     }
-    if (hasFinished) {
-      // Invalidate specific resource queries instead of wiping entire client cache
-      void queryClient.invalidateQueries({ queryKey: ['admin-commands'] });
-      void queryClient.invalidateQueries({ queryKey: ['admin-summary'] });
-      void queryClient.invalidateQueries({ queryKey: ['active-admin-commands'] });
-    }
-    previousRunning.current = currentRunning;
+    previous.current = current;
   }, [active, queryClient]);
 
-  if (active.length === 0) return null;
+  if (!active?.total) return null;
+  const command = active.total === 1 ? active.rows[0] : undefined;
+  const title = command
+    ? (command.status === 'QUEUED' ? '1 tác vụ đang chờ' : '1 tác vụ đang chạy')
+    : active.total.toLocaleString('vi-VN') + ' tác vụ chờ hoặc đang chạy';
 
-  return (
-    <div className="active-commands-banner">
-      <div className="active-commands-info">
-        <Loader2 size={15} className="spinner" style={{ animation: 'spin 1s linear infinite', flexShrink: 0 }} />
-        <span>
-          Đang chạy <b>{active.length}</b> tác vụ nền:{' '}
-          {active.map(c => `${c.action || 'LỆNH'} (${c.status})`).join(', ')}
-        </span>
-      </div>
-      <div className="active-commands-actions">
-        {active.map(c => (
-          <button
-            key={String(c.id)}
-            className="light-button"
-            style={{ padding: '3px 8px', fontSize: '11px', background: '#3730a3', color: '#fff', border: 'none', whiteSpace: 'nowrap' }}
-            onClick={() => onSelectCommand(String(c.id))}
-          >
-            Theo dõi {String(c.action || c.id).slice(0, 12)} <ArrowRight size={11} style={{ display: 'inline' }} />
-          </button>
-        ))}
-      </div>
-    </div>
-  );
+  return <div className="active-commands-banner">
+    <span><Activity size={15} aria-hidden="true"/>{title}</span>
+    <button className="text-button" onClick={() => command ? onSelectCommand(command.id) : onOpenHistory()}>
+      {command ? 'Theo dõi tác vụ' : 'Xem tác vụ nền'} <ArrowRight size={13} aria-hidden="true"/>
+    </button>
+  </div>;
 }

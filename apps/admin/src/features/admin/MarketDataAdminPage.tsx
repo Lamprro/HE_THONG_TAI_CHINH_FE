@@ -155,8 +155,6 @@ export function MarketDataAdminPage() {
     <div className="admin-stack">
       <Panel
         title="Dữ liệu Thị trường & Chỉ số Canonical"
-        eyebrow="MARKET DATA & INDICES MANAGEMENT"
-        note="Quản trị danh mục chỉ số, giá đóng cửa chuẩn hóa, thành phần rổ chỉ số và khởi tạo job tự động."
         action={
           <button
             className="text-button"

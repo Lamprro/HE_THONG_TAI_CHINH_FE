@@ -4,7 +4,7 @@ import { API_BASE, ApiError, getJson, postJson, setApiBase } from './client';
 import { installAuthIntegration } from './access';
 import type { AdminLogin, AdminSession } from './admin-contract';
 
-export function SessionGate({ children }: { children: ReactNode }) {
+export function SessionGate({ children }: { children: (session: AdminSession, logout: () => void) => ReactNode }) {
   const [session, setSession] = useState<AdminSession>();
   const [username, setUsername] = useState('');
   const [password, setPassword] = useState('');
@@ -52,8 +52,7 @@ export function SessionGate({ children }: { children: ReactNode }) {
     }
   };
 
-  if (session) return <><div className="session-bar"><span>Admin · {session.email ?? session.principal}</span>
-    <button className="text-button" onClick={() => disconnect()}>Đăng xuất</button></div>{children}</>;
+  if (session) return <>{children(session, () => disconnect())}</>;
 
   return <main className="connect-page">
     <form className="panel connect-card" onSubmit={event => { event.preventDefault(); if (!busy) void connect(); }}>
