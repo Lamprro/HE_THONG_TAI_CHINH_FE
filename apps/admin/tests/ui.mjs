@@ -113,6 +113,8 @@ try {
   await page.getByLabel('Tiền tệ *', { exact: true }).fill('VND'); await review(); await available(); await close();
   await button('Tác vụ & lịch sử').click(); await button('Lịch sử job').click(); await page.getByText('Price Import', { exact: true }).click();
   await button('Xem raw payload').click(); await page.getByText('SHA-256: ' + 'a'.repeat(64), { exact: true }).waitFor();
+  await button('Đọc dữ liệu nguồn').click();
+  await page.getByText('Không có nội dung nguồn.', { exact: true }).waitFor();
   await button('Xem validation của payload').click();
   await page.getByText('RAW_REQUIRED', { exact: true }).click();
   await page.getByText('Check source mapping', { exact: true }).waitFor();

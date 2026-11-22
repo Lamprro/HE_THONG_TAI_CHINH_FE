@@ -47,7 +47,7 @@ export function Records({ rows, onRun, onRaw, actions }: { rows: Row[]; onRun?: 
   </>;
 }
 export function ApiResult({ value }: { value: unknown }) {
-  if (value === undefined) return <p>Chưa có nội dung hoặc backend trả thành công không kèm body.</p>;
+  if (value === undefined) return <p>Không có nội dung.</p>;
   if (Array.isArray(value) && value.every(v => v && typeof v === 'object' && !Array.isArray(v))) return <Records rows={value as Row[]}/>;
   if (value && typeof value === 'object' && !Array.isArray(value)) return <RecordDetail row={value as Row}/>;
   return <pre>{safeObject(value)}</pre>;
