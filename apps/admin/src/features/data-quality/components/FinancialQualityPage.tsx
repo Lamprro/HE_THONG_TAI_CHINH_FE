@@ -1,9 +1,8 @@
-import { useMemo, useState } from 'react';
+import { useState } from 'react';
 import { useQuery, useMutation, useQueryClient } from '@tanstack/react-query';
-import { AlertCircle, CheckCircle2, Database, ExternalLink, FileText, GitCompare, RefreshCw, RotateCcw, Search, ShieldAlert, Wrench } from 'lucide-react';
+import { RefreshCw, Wrench } from 'lucide-react';
 import { API_BASE, getJson, postJson } from '../../../shared/api/client';
 import { Badge, Drawer, Panel, QueryState } from '../../../shared/components/Ui';
-import { dateTime, safeText } from '../../../shared/utils/format';
 
 interface FinancialStatus {
   symbol: string;
@@ -14,67 +13,15 @@ interface FinancialStatus {
     missing_revision: number | string;
     missing_unit: number | string;
   };
-  officialDocuments: number | string;
   trainingReadiness: string;
-  supportedOfficialIssuers: string[];
   serverTime: string;
-}
-
-interface DisclosureDocument {
-  id?: string | number;
-  rawPayloadId?: string;
-  observedAt?: string;
-  document?: {
-    document_id?: string;
-    symbol?: string;
-    title?: string;
-    published_on?: string;
-    period_end?: string;
-    report_scope?: string;
-    document_url?: string;
-    source_code?: string;
-    [key: string]: unknown;
-  };
-  document_id?: string;
-  symbol?: string;
-  title?: string;
-  document_title?: string;
-  published_on?: string;
-  period_end?: string;
-  report_scope?: string;
-  document_url?: string;
-  source_code?: string;
-  observed_at?: string;
-  [key: string]: unknown;
-}
-
-interface BindingRow {
-  id: string;
-  item_code: string;
-  period_end: string;
-  canonical_value: string | number | null;
-  document_value: string | number | null;
-  comparison: string;
-  report_scope: string;
-  period_basis: string;
-  source_page?: number | string;
-  usable_from: string;
-  stale_binding: boolean;
-  observed_value_available: boolean;
-  [key: string]: unknown;
 }
 
 export function FinancialQualityPage() {
   const [symbol, setSymbol] = useState('FPT');
-  const [activeTab, setActiveTab] = useState<'status' | 'disclosures' | 'bindings' | 'recalculate'>('status');
-  
-  // Refresh disclosures modal state
-  const [showRefreshModal, setShowRefreshModal] = useState(false);
-  const [refreshYear, setRefreshYear] = useState<number>(new Date().getFullYear());
-  const [refreshPage, setRefreshPage] = useState<number>(1);
+  const [activeTab, setActiveTab] = useState<'status' | 'recalculate'>('status');
 
   // Recalculate metrics modal state
-  const [showRecalcModal, setShowRecalcModal] = useState(false);
   const [recalcFrom, setRecalcFrom] = useState('2024-01-01');
   const [recalcTo, setRecalcTo] = useState(new Intl.DateTimeFormat('en-CA', { timeZone: 'Asia/Ho_Chi_Minh', year: 'numeric', month: '2-digit', day: '2-digit' }).format(new Date()));
   const [recalcReason, setRecalcReason] = useState('Tính toán lại chỉ số sau khi chuẩn hóa BCTC');
@@ -82,10 +29,6 @@ export function FinancialQualityPage() {
   // Review legacy state
   const [showLegacyModal, setShowLegacyModal] = useState(false);
   const [legacyReason, setLegacyReason] = useState('Rà soát nguồn gốc giá và BCTC cũ');
-
-  // Reconcile bindings modal state
-  const [showReconcileModal, setShowReconcileModal] = useState(false);
-  const [reconcileReason, setReconcileReason] = useState('Đối chiếu chỉ tiêu BCTC với tài liệu công bố chính thức');
 
   const [actionMessage, setActionMessage] = useState<string | null>(null);
 
@@ -97,64 +40,6 @@ export function FinancialQualityPage() {
     staleTime: 60000,
   });
 
-  const disclosuresQuery = useQuery({
-    queryKey: ['financial-data-disclosures', symbol],
-    queryFn: () => getJson<DisclosureDocument[]>(API_BASE, `/api/admin/financial-data/disclosures?symbol=${encodeURIComponent(symbol)}&limit=100`),
-    staleTime: 60000,
-    enabled: activeTab === 'disclosures',
-  });
-
-  const reconciliationQuery = useQuery({
-    queryKey: ['financial-data-reconciliation', symbol],
-    queryFn: () => getJson<unknown[]>(API_BASE, `/api/admin/financial-data/reconciliation?symbol=${encodeURIComponent(symbol)}`),
-    staleTime: 60000,
-    enabled: activeTab === 'bindings',
-  });
-
-  const bindingsQuery = useQuery({
-    queryKey: ['financial-data-bindings', symbol],
-    queryFn: () => {
-      const asOf = new Date().toISOString();
-      return getJson<BindingRow[]>(API_BASE, `/api/admin/financial-data/bindings?symbol=${encodeURIComponent(symbol)}&asOf=${encodeURIComponent(asOf)}&limit=100`);
-    },
-    staleTime: 60000,
-    enabled: activeTab === 'bindings',
-  });
-
-  // Mutations
-  const refreshDisclosuresMutation = useMutation({
-    mutationFn: () => postJson(API_BASE, '/api/admin/financial-data/disclosures/refresh', {
-      symbol,
-      year: refreshYear,
-      page: refreshPage,
-    }),
-    onSuccess: (res: any) => {
-      setActionMessage(`Đã tải lại công bố thành công. Lưu ${res?.insertedDocuments || res?.savedDocuments || '0'} tài liệu (Run ID: ${res?.ingestionRunId || '—'}).`);
-      setShowRefreshModal(false);
-      void queryClient.invalidateQueries({ queryKey: ['financial-data-disclosures', symbol] });
-      void queryClient.invalidateQueries({ queryKey: ['financial-data-status', symbol] });
-    },
-    onError: (err: Error) => {
-      setActionMessage(`Lỗi tải lại công bố: ${err.message}`);
-    },
-  });
-
-  const reconcileBindingsMutation = useMutation({
-    mutationFn: () => postJson(API_BASE, '/api/admin/financial-data/bindings/reconcile', {
-      symbol,
-      reason: reconcileReason,
-    }),
-    onSuccess: (res: any) => {
-      setActionMessage(`Đã đối chiếu liên kết thành công. Bổ sung ${res?.insertedBindings ?? 0} bản ghi binding (báo cáo vendor sửa: ${res?.vendorStatementsModified ?? 0}).`);
-      setShowReconcileModal(false);
-      void queryClient.invalidateQueries({ queryKey: ['financial-data-bindings', symbol] });
-      void queryClient.invalidateQueries({ queryKey: ['financial-data-reconciliation', symbol] });
-    },
-    onError: (err: Error) => {
-      setActionMessage(`Lỗi đối chiếu liên kết: ${err.message}`);
-    },
-  });
-
   const recalculateMetricsMutation = useMutation({
     mutationFn: () => postJson(API_BASE, '/api/admin/financial-data/metrics/recalculate', {
       symbol,
@@ -163,7 +48,6 @@ export function FinancialQualityPage() {
     }),
     onSuccess: (res: any) => {
       setActionMessage(`Tính lại chỉ số thành công. Báo cáo nguồn: ${res?.sourceStatements ?? 0}, chèn mới: ${res?.inserted ?? 0}, giữ nguyên: ${res?.unchanged ?? 0}.`);
-      setShowRecalcModal(false);
     },
     onError: (err: Error) => {
       setActionMessage(`Lỗi tính lại chỉ số: ${err.message}`);
@@ -189,20 +73,13 @@ export function FinancialQualityPage() {
   return (
     <div className="admin-stack">
       <Panel
-        title="Quản trị Chất lượng Báo cáo Tài chính & Tài liệu Công bố"
-        eyebrow="FINANCIAL STATEMENT QUALITY & DISCLOSURES"
-        note="Độ phủ BCTC, đối chiếu tài liệu chính thức của doanh nghiệp, kiểm định bindings và tính toán lại chỉ số tài chính."
+        title="Chất lượng báo cáo tài chính"
+        eyebrow="FINANCIAL STATEMENT QUALITY"
+        note="Xem độ phủ báo cáo, rà soát dữ liệu lịch sử và tính lại chỉ số. Số liệu lệch giữa các nguồn được xử lý trong mục Phiên bản dữ liệu."
         action={
           <button
             className="text-button"
-            onClick={() => {
-              void statusQuery.refetch();
-              if (activeTab === 'disclosures') void disclosuresQuery.refetch();
-              if (activeTab === 'bindings') {
-                void reconciliationQuery.refetch();
-                void bindingsQuery.refetch();
-              }
-            }}
+            onClick={() => void statusQuery.refetch()}
           >
             <RefreshCw size={14} /> Tải lại
           </button>
@@ -220,10 +97,6 @@ export function FinancialQualityPage() {
               placeholder="VD: FPT"
             />
           </label>
-
-          <span className="subtle">
-            Tổ chức phát hành hỗ trợ công bố chính thức: {status?.supportedOfficialIssuers?.join(', ') || 'HPG, HSG, VNM, ACB, EIB'}
-          </span>
         </div>
 
         {actionMessage && (
@@ -242,22 +115,6 @@ export function FinancialQualityPage() {
             onClick={() => setActiveTab('status')}
           >
             Độ phủ &amp; Tình trạng BCTC
-          </button>
-          <button
-            role="tab"
-            aria-selected={activeTab === 'disclosures'}
-            className={activeTab === 'disclosures' ? 'active' : ''}
-            onClick={() => setActiveTab('disclosures')}
-          >
-            Tài liệu công bố chính thức ({status?.officialDocuments ?? '—'})
-          </button>
-          <button
-            role="tab"
-            aria-selected={activeTab === 'bindings'}
-            className={activeTab === 'bindings' ? 'active' : ''}
-            onClick={() => setActiveTab('bindings')}
-          >
-            Đối chiếu &amp; Bindings
           </button>
           <button
             role="tab"
@@ -292,8 +149,8 @@ export function FinancialQualityPage() {
                     <span>Chưa rõ phạm vi (hợp nhất/riêng)</span>
                   </div>
                   <div>
-                    <strong>{Number(status.officialDocuments || 0).toLocaleString('vi-VN')}</strong>
-                    <span>Tài liệu công bố chính thức</span>
+                    <strong>{Number(status.canonical?.missing_unit || 0).toLocaleString('vi-VN')}</strong>
+                    <span>Thiếu đơn vị hoặc loại tiền</span>
                   </div>
                 </div>
 
@@ -302,7 +159,7 @@ export function FinancialQualityPage() {
                   <div style={{ display: 'flex', gap: '1rem', alignItems: 'center', marginTop: '0.5rem' }}>
                     <Badge tone="amber">{status.trainingReadiness || 'REQUIRES_VALUE_VINTAGE_REVIEW'}</Badge>
                     <span>
-                      Dữ liệu báo cáo của {symbol} yêu cầu rà soát nhãn kỳ và đối chiếu tài liệu trước khi đưa vào huấn luyện mô hình.
+                      Dữ liệu báo cáo của {symbol} yêu cầu rà soát kỳ báo cáo, nguồn và thời điểm công bố trước khi đưa vào huấn luyện mô hình.
                     </span>
                   </div>
                 </div>
@@ -315,151 +172,12 @@ export function FinancialQualityPage() {
                     <Wrench size={14} style={{ marginRight: 4 }} />
                     Rà soát dữ liệu cũ (Review Legacy)
                   </button>
-                  <button
-                    className="light-button"
-                    onClick={() => setShowRefreshModal(true)}
-                  >
-                    <DownloadIcon size={14} style={{ marginRight: 4 }} />
-                    Tải lại tài liệu công bố chính thức
-                  </button>
                 </div>
               </div>
             )}
           </QueryState>
         )}
 
-        {/* Tab 2: Disclosures */}
-        {activeTab === 'disclosures' && (
-          <div className="admin-stack">
-            <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center', marginBottom: '0.5rem' }}>
-              <div>
-                <h3 style={{ margin: 0 }}>Tài liệu công bố chính thức từ doanh nghiệp ({symbol})</h3>
-                <span className="subtle">Lấy trực tiếp từ cổng thông tin quan hệ nhà đầu tư (IR)</span>
-              </div>
-              <button
-                className="primary-button"
-                onClick={() => setShowRefreshModal(true)}
-              >
-                <RefreshCw size={14} style={{ marginRight: 4 }} />
-                Tải lại công bố
-              </button>
-            </div>
-
-            <QueryState query={disclosuresQuery} empty={`Chưa có tài liệu công bố nào được thu thập cho mã ${symbol}.`}>
-              <div className="table-scroll">
-                <table>
-                  <thead>
-                    <tr>
-                      <th>Document ID</th>
-                      <th>Tiêu đề tài liệu</th>
-                      <th>Ngày công bố</th>
-                      <th>Kỳ kết thúc</th>
-                      <th>Phạm vi</th>
-                      <th>Nguồn</th>
-                      <th>Liên kết gốc</th>
-                    </tr>
-                  </thead>
-                  <tbody>
-                    {(disclosuresQuery.data || []).map((doc, idx) => {
-                      const d = (doc.document || doc) as Record<string, any>;
-                      const docId = d.document_id || doc.id || doc.document_id || idx;
-                      const title = d.title || d.document_title || doc.title || doc.document_title || 'Tài liệu công bố';
-                      const publishedOn = d.published_on || doc.published_on;
-                      const periodEnd = d.period_end || doc.period_end;
-                      const reportScope = d.report_scope || doc.report_scope || 'UNKNOWN';
-                      const sourceCode = d.source_code || doc.source_code || 'IR';
-                      const docUrl = d.document_url || doc.document_url;
-                      return (
-                        <tr key={String(docId)}>
-                          <td><code>{String(docId).slice(0, 16)}</code></td>
-                          <td><strong>{safeText(title)}</strong></td>
-                          <td>{safeText(publishedOn)}</td>
-                          <td>{safeText(periodEnd)}</td>
-                          <td>
-                            <Badge tone={reportScope === 'CONSOLIDATED' ? 'blue' : reportScope === 'SEPARATE' ? 'cyan' : 'neutral'}>
-                              {safeText(reportScope)}
-                            </Badge>
-                          </td>
-                          <td>{safeText(sourceCode)}</td>
-                          <td>
-                            {docUrl ? (
-                              <a href={docUrl} target="_blank" rel="noopener noreferrer" style={{ display: 'inline-flex', alignItems: 'center', gap: 3 }}>
-                                Tải về <ExternalLink size={12} />
-                              </a>
-                            ) : '—'}
-                          </td>
-                        </tr>
-                      );
-                    })}
-                  </tbody>
-                </table>
-              </div>
-            </QueryState>
-          </div>
-        )}
-
-        {/* Tab 3: Bindings */}
-        {activeTab === 'bindings' && (
-          <div className="admin-stack">
-            <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center', marginBottom: '0.5rem' }}>
-              <div>
-                <h3 style={{ margin: 0 }}>Bảng đối chiếu chỉ tiêu BCTC vs Tài liệu công bố ({symbol})</h3>
-                <span className="subtle">Xác nhận tính chính xác của từng dòng số liệu BCTC đã chuẩn hóa</span>
-              </div>
-              <button
-                className="primary-button"
-                disabled={reconcileBindingsMutation.isPending}
-                onClick={() => setShowReconcileModal(true)}
-              >
-                <GitCompare size={14} style={{ marginRight: 4 }} />
-                {reconcileBindingsMutation.isPending ? 'Đang đối chiếu…' : 'Đối chiếu liên kết (Reconcile Bindings)'}
-              </button>
-            </div>
-
-            <QueryState query={bindingsQuery} empty={`Chưa có bản ghi binding được đối chiếu cho mã ${symbol}. Bấm "Đối chiếu liên kết" để kích hoạt.`}>
-              <div className="table-scroll">
-                <table>
-                  <thead>
-                    <tr>
-                      <th>Chỉ tiêu (Item Code)</th>
-                      <th>Kỳ kết thúc</th>
-                      <th className="number">Giá trị Canonical</th>
-                      <th className="number">Giá trị trong tài liệu</th>
-                      <th>Kết quả so khớp</th>
-                      <th>Phạm vi / Cơ sở</th>
-                      <th>Hiệu lực từ</th>
-                      <th>Trạng thái sử dụng</th>
-                    </tr>
-                  </thead>
-                  <tbody>
-                    {(bindingsQuery.data || []).map((row, idx) => (
-                      <tr key={row.id || idx}>
-                        <td><strong>{row.item_code}</strong></td>
-                        <td>{safeText(row.period_end)}</td>
-                        <td className="number">{Number(row.canonical_value).toLocaleString('vi-VN')}</td>
-                        <td className="number">{Number(row.document_value).toLocaleString('vi-VN')}</td>
-                        <td>
-                          <Badge tone={row.comparison === 'EXACT_VALUE_MATCH' ? 'green' : 'red'}>
-                            {row.comparison === 'EXACT_VALUE_MATCH' ? 'Khớp chính xác' : 'Lệch số liệu'}
-                          </Badge>
-                        </td>
-                        <td>{row.report_scope} · {row.period_basis}</td>
-                        <td><small>{dateTime(row.usable_from)}</small></td>
-                        <td>
-                          <Badge tone={row.observed_value_available ? 'green' : 'neutral'}>
-                            {row.observed_value_available ? 'Sẵn sàng dùng' : 'Chưa khả dụng'}
-                          </Badge>
-                        </td>
-                      </tr>
-                    ))}
-                  </tbody>
-                </table>
-              </div>
-            </QueryState>
-          </div>
-        )}
-
-        {/* Tab 4: Recalculate Metrics */}
         {activeTab === 'recalculate' && (
           <div className="admin-stack">
             <h3>Tính toán lại Chỉ số Tài chính (Financial Metrics Engine)</h3>
@@ -507,53 +225,6 @@ export function FinancialQualityPage() {
         )}
       </Panel>
 
-      {/* Modal Refresh Disclosures */}
-      {showRefreshModal && (
-        <Drawer
-          title={`Tải lại công bố chính thức cho mã ${symbol}`}
-          subtitle="Gửi yêu cầu crawler thu thập tài liệu BCTC gốc"
-          onClose={() => setShowRefreshModal(false)}
-        >
-          <div className="detail-section">
-            <div style={{ marginBottom: '0.75rem' }}>
-              <label style={{ display: 'block', fontSize: '0.85rem', marginBottom: 3 }}>Năm tài chính</label>
-              <input
-                type="number"
-                value={refreshYear}
-                onChange={e => setRefreshYear(Number(e.target.value))}
-                min={2000}
-                max={2099}
-                style={{ width: '100%' }}
-              />
-            </div>
-            <div style={{ marginBottom: '1rem' }}>
-              <label style={{ display: 'block', fontSize: '0.85rem', marginBottom: 3 }}>Trang kết quả</label>
-              <input
-                type="number"
-                value={refreshPage}
-                onChange={e => setRefreshPage(Number(e.target.value))}
-                min={1}
-                max={100}
-                style={{ width: '100%' }}
-              />
-            </div>
-
-            <div className="toolbar" style={{ display: 'flex', gap: '0.5rem' }}>
-              <button
-                className="primary-button"
-                disabled={refreshDisclosuresMutation.isPending}
-                onClick={() => refreshDisclosuresMutation.mutate()}
-              >
-                {refreshDisclosuresMutation.isPending ? 'Đang gửi…' : 'Xác nhận tải lại'}
-              </button>
-              <button className="light-button" onClick={() => setShowRefreshModal(false)}>
-                Hủy
-              </button>
-            </div>
-          </div>
-        </Drawer>
-      )}
-
       {/* Modal Review Legacy */}
       {showLegacyModal && (
         <Drawer
@@ -590,46 +261,6 @@ export function FinancialQualityPage() {
         </Drawer>
       )}
 
-      {/* Modal Reconcile Bindings */}
-      {showReconcileModal && (
-        <Drawer
-          title={`Đối chiếu liên kết BCTC cho mã ${symbol}`}
-          subtitle="So khớp chỉ tiêu BCTC canonical với tài liệu công bố và ghi nhận evidence"
-          onClose={() => setShowReconcileModal(false)}
-        >
-          <div className="detail-section">
-            <p>
-              Quy trình đối chiếu sẽ tìm kiếm các tài liệu công bố chính thức đã thu thập cho mã <strong>{symbol}</strong>,
-              so sánh các chỉ tiêu tài chính canonical với giá trị trong báo cáo gốc và tạo liên kết xác thực (bindings).
-            </p>
-            <div style={{ marginBottom: '1rem' }}>
-              <label style={{ display: 'block', fontSize: '0.85rem', marginBottom: 3 }}>Lý do đối chiếu (Audit reason)</label>
-              <input
-                type="text"
-                value={reconcileReason}
-                onChange={e => setReconcileReason(e.target.value)}
-                style={{ width: '100%' }}
-              />
-            </div>
-            <div className="toolbar" style={{ display: 'flex', gap: '0.5rem' }}>
-              <button
-                className="primary-button"
-                disabled={reconcileBindingsMutation.isPending || !reconcileReason.trim()}
-                onClick={() => reconcileBindingsMutation.mutate()}
-              >
-                {reconcileBindingsMutation.isPending ? 'Đang đối chiếu…' : 'Xác nhận đối chiếu'}
-              </button>
-              <button className="light-button" onClick={() => setShowReconcileModal(false)}>
-                Hủy
-              </button>
-            </div>
-          </div>
-        </Drawer>
-      )}
     </div>
   );
-}
-
-function DownloadIcon({ size = 14, style }: { size?: number; style?: React.CSSProperties }) {
-  return <Database size={size} style={style} />;
 }

@@ -27,9 +27,6 @@ interface StatementCoverageRow {
   canonical_statements: number | string;
   missing_publication: number | string;
   missing_scope: number | string;
-  official_documents?: number | string;
-  reviewed_facts?: number | string;
-  officialAdapterSupported?: boolean;
 }
 
 interface MacroCoverageRow {
@@ -151,7 +148,6 @@ export function CoverageRemediationPanel({ onWorkflow }: { onWorkflow?: (selecti
         missingAdjusted: Number(priceRow.missing_adjusted_close || 0),
         canonicalStatements: stmts,
         missingPub: Number(stmtRow?.missing_publication || 0),
-        officialDocs: Number(stmtRow?.official_documents || 0),
         status,
       };
     });
@@ -280,7 +276,6 @@ export function CoverageRemediationPanel({ onWorkflow }: { onWorkflow?: (selecti
                 <th>Dải ngày giá</th>
                 <th className="number">Báo cáo (CĐKT)</th>
                 <th className="number">Thiếu ngày CB</th>
-                <th className="number">Tài liệu CB</th>
                 <th>Tình trạng</th>
                 <th style={{ textAlign: 'right' }}>Hành động khắc phục</th>
               </tr>
@@ -306,7 +301,6 @@ export function CoverageRemediationPanel({ onWorkflow }: { onWorkflow?: (selecti
                   </td>
                   <td className="number">{row.canonicalStatements}</td>
                   <td className="number">{row.missingPub > 0 ? <span style={{ color: 'var(--warning, #f59e0b)' }}>{row.missingPub}</span> : '0'}</td>
-                  <td className="number">{row.officialDocs}</td>
                   <td>
                     {row.status === 'HEALTHY' ? (
                       <Badge tone="green">Đầy đủ</Badge>
@@ -415,10 +409,6 @@ export function CoverageRemediationPanel({ onWorkflow }: { onWorkflow?: (selecti
               <div>
                 <span>Báo cáo tài chính</span>
                 <b>{selectedDetail.canonicalStatements} báo cáo</b>
-              </div>
-              <div>
-                <span>Tài liệu công bố chính thức</span>
-                <b>{selectedDetail.officialDocs} tài liệu</b>
               </div>
             </div>
           </div>

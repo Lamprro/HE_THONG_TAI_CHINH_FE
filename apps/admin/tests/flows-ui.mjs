@@ -44,6 +44,9 @@ await page.route('**/api/**',async route=>{const request=route.request(),url=new
   if(path.endsWith('/results'))return reply([]);
   if(path==='/api/admin/prompts')return reply(newPrompt?[original,newPrompt]:[original]);
   if(path.startsWith('/api/admin/prompts/'))return reply(path.endsWith(id(4))?newPrompt:original);
+  if(path==='/api/admin/financial-data/status')return reply({
+    symbol:'FPT', canonical:{canonical_statements:8,missing_publication:2,missing_scope:0,missing_unit:1},
+  });
   if(path.includes('/data/'))return reply({rows:[],total:0});return reply([]);
 });
 const button=name=>page.getByRole('button',{name,exact:true});
@@ -82,5 +85,12 @@ try{
   await page.getByLabel('Version ID').waitFor();
   assert.equal(await page.getByLabel('Version ID').inputValue(),pendingVersion.id);
   assert.equal(writes.find(w=>w.path.endsWith('/data-versions/'+pendingVersion.id+'/review')).body.accept,true);
+  await page.setViewportSize({ width: 1440, height: 1000 });
+  await button('Chất lượng dữ liệu').click();
+  await button('Chất lượng BCTC').click();
+  await page.getByText('Thiếu đơn vị hoặc loại tiền',{exact:true}).waitFor();
+  assert.equal(await page.getByRole('tab',{name:/Tài liệu công bố|Bindings/}).count(),0);
+  await page.getByRole('tab',{name:'Tính lại chỉ số tài chính'}).click();
+  await button('Bắt đầu tính toán lại chỉ số').waitFor();
   console.log('FULL FLOWS UI PASS: typed canonical pipeline, queued cancellation, reviewed retry, issue note, forecast eligibility gate, recovery approval separated from analysis, immutable prompt version/promotion, mobile and no credential persistence. All APIs intercepted; no real provider, AI or business DB writes.');
 }finally{await browser.close();await new Promise(r=>server.close(r));}
