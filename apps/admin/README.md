@@ -1,5 +1,12 @@
 # Cập nhật 19/11/2026 — rà soát và hoàn thiện admin FE
 
+
+## Theo dõi dữ liệu
+
+- Mở **Tác vụ & lịch sử → Lịch sử job**, chọn nhóm lấy nguồn hoặc xử lý, rồi chọn job. Nút **Lịch sử** cạnh mỗi job mở sẵn bộ lọc.
+- Mở một lượt chạy để xem raw, kết quả kiểm tra và phiên bản. **Xem dữ liệu đã ghi** mở bảng đích đã lọc theo ID phiên bản.
+- Mục **Kiểm tra & ghi dữ liệu** có kết quả validation, phiên bản và luật. Mục **Tra cứu dữ liệu** mở được cả dữ liệu đã ghi và lịch sử vận hành.
+
 - Toàn bộ màn hình (tổng quan, lượt chạy, job, nguồn, chất lượng, danh mục mã, form thao tác) và lỗi API dùng tiếng Việt.
 - Lượt chạy / raw payload / chất lượng lọc theo lượt chạy giờ đọc đúng bản ghi của lượt đó qua bộ lọc chính xác của data browser (tối đa 100), không còn chỉ tìm trong mẫu 50 kết quả mới nhất.
 - API quản trị nâng cao: suy ra tên tham số đường dẫn từ route khi catalog backend trả tên "body" (47/90 endpoint), nên các form có ID trên đường dẫn dùng được.

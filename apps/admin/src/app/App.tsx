@@ -9,7 +9,7 @@ import { useDashboardQueries, type DashboardSection } from '../features/dashboar
 import type { ValidationResult } from '../features/dashboard/types/dto';
 import { Overview } from '../features/dashboard/components/Overview';
 import { JobsPage } from '../features/ingestion/components/JobsPage';
-import { RunDrawer, RunsPanel } from '../features/ingestion/components/Runs';
+import { JobRunHistory, RunDrawer } from '../features/ingestion/components/Runs';
 import { DataQualityPage, ValidationDrawer } from '../features/data-quality/components/QualityPage';
 import { SourcesPage } from '../features/data-sources/components/SourcesPage';
 import { dateTime } from '../shared/utils/format';
@@ -17,6 +17,7 @@ import { OperationDrawer, type Operation } from '../features/operations/Operatio
 import { SessionGate } from '../shared/api/SessionGate';
 import { DataBrowser } from '../features/admin/DataBrowser';
 import { CatalogMaintenancePanel } from '../features/admin/CatalogMaintenancePanel';
+import { CoverageRemediationPanel } from '../features/admin/CoverageRemediationPanel';
 import { RuntimePage } from '../features/admin/RuntimePage';
 import { FinancialQualityPage } from '../features/data-quality/components/FinancialQualityPage';
 import { MarketDataAdminPage } from '../features/admin/MarketDataAdminPage';
@@ -26,6 +27,7 @@ import { OperationsHistory } from '../features/admin/OperationsHistory';
 import { ActiveCommandsBanner } from '../features/admin/ActiveCommandsBanner';
 import { LineageTracerPage } from '../features/admin/LineageTracerPage';
 import { CommandTracker } from '../features/admin/CommandTracker';
+import type { DataSelection } from '../features/admin/dataViews';
 import { SystemSummary } from '../features/admin/SystemSummary';
 
 const descriptions: Record<Section, string> = {
@@ -39,12 +41,11 @@ const descriptions: Record<Section, string> = {
   data: 'Tra cứu toàn bộ bảng có phân trang, lọc chính xác theo nguồn gốc.',
   system: 'Java, database, Python, scheduler, độ phủ dữ liệu và danh mục API quản trị.',
 };
-type HistoryKind = 'commands' | 'runs' | 'all-runs' | 'quality';
-const historyTabs: [HistoryKind, string][] = [['commands', 'Tác vụ nền'], ['runs', 'Lượt chạy gần đây'], ['all-runs', 'Toàn bộ lượt chạy'], ['quality', 'Validation & version']];
-const writeNote = 'Mọi thao tác ghi đều có bước xem lại trước khi gửi.';
+type HistoryKind = 'commands' | 'runs' | 'quality';
+const historyTabs: [HistoryKind, string][] = [['runs', 'Lịch sử job'], ['quality', 'Kiểm tra & ghi dữ liệu'], ['commands', 'Tác vụ nền']];
 
 function Tabs<T extends string>({ value, onChange, items }: { value: T; onChange: (value: T) => void; items: [T, string][] }) {
-  return <div className="toolbar">{items.map(([id, title]) => <button key={id} className={value === id ? 'primary-button' : 'light-button'} onClick={() => onChange(id)}>{title}</button>)}</div>;
+  return <div className="toolbar section-tabs">{items.map(([id, title]) => <button key={id} aria-pressed={value === id} className={value === id ? 'primary-button' : 'light-button'} onClick={() => onChange(id)}>{title}</button>)}</div>;
 }
 
 export function App() {
@@ -53,10 +54,13 @@ export function App() {
 function Dashboard() {
   const [section, setSection] = useState<Section>('overview');
   const [workflow, setWorkflow] = useState<WorkflowSelection>({});
-  const [historyKind, setHistoryKind] = useState<HistoryKind>('commands');
+  const [historyKind, setHistoryKind] = useState<HistoryKind>('runs');
+  const [historyJob, setHistoryJob] = useState<string | undefined>();
+  const [dataSelection, setDataSelection] = useState<DataSelection>();
+  const [dataOrigin, setDataOrigin] = useState<{ section: Section; runId: string | null; rawId: string | null }>();
   const [jobsTab, setJobsTab] = useState<'jobs' | 'sources'>('jobs');
   const [qualityTab, setQualityTab] = useState<'validation' | 'financial' | 'lineage'>('validation');
-  const [systemTab, setSystemTab] = useState<'status' | 'market' | 'api'>('status');
+  const [systemTab, setSystemTab] = useState<'status' | 'coverage' | 'market' | 'api'>('status');
   const [dark, setDark] = useState(false);
   const [runId, setRunId] = useState<string | null>(null);
   const [issue, setIssue] = useState<ValidationResult | null>(null);
@@ -89,20 +93,38 @@ function Dashboard() {
   const current = sections.find(item => item.id === section)!;
   const openJobs = (id?: string) => { setJobLink(id ?? null); setJobsTab('jobs'); setSection('jobs'); };
   const openSources = (id?: number) => { setSourceLink(id ?? null); setJobsTab('sources'); setSection('jobs'); };
-  const openQuality = (run: string | null, raw: string | null, tab: 'validation' | 'versions') => { setQualityRun(run); setQualityRaw(raw); setQualityView(tab); setSection('quality'); };
+  const openQuality = (run: string | null, raw: string | null, tab: 'validation' | 'versions') => { setQualityRun(run); setQualityRaw(raw); setQualityView(tab); setQualityTab('validation'); setSection('quality'); };
+  const openHistory = (jobId?: string) => { setHistoryJob(jobId); setHistoryKind('runs'); setSection('history'); };
+  const openOutput = (selection: DataSelection) => {
+    setDataOrigin({ section, runId, rawId });
+    setRunId(null);
+    setRawId(null);
+    setDataSelection(selection);
+    setSection('data');
+  };
+  const returnToOrigin = () => {
+    if (!dataOrigin) return;
+    setSection(dataOrigin.section);
+    setRunId(dataOrigin.runId);
+    setRawId(dataOrigin.rawId);
+    setDataOrigin(undefined);
+  };
+  const navigate = (next: Section) => {
+    if (next === 'data') { setDataSelection(undefined); setDataOrigin(undefined); }
+    if (next === 'history') setHistoryJob(undefined);
+    setSection(next);
+  };
   const openWorkflow = (selection: WorkflowSelection) => { setWorkflow(selection); setSection('workflow'); };
 
-  return <AdminLayout section={section} setSection={setSection} dark={dark} setDark={setDark}>
+  return <AdminLayout section={section} setSection={navigate} dark={dark} setDark={setDark}>
     <div className="topline">
       <div className="breadcrumb">{current.group} <span>/</span> {current.title}</div>
-      <span className="read-only">ADMIN OPERATIONS</span>
     </div>
     <div className="content">
       <header className="page-header">
         <div>
-          <div className="eyebrow">TOKEN BURNER / ADMIN CONSOLE</div>
           <h1>{current.title}</h1>
-          <p>{descriptions[section]}</p>
+          {['overview', 'workflow', 'quality'].includes(section) && <p>{descriptions[section]}</p>}
           <p className="last-updated">Cập nhật lúc {dateTime(latest)}</p>
         </div>
         <div className="header-actions">
@@ -116,20 +138,17 @@ function Dashboard() {
 
       {section === 'overview' && <>
         <SystemSummary/>
-        <Overview health={health} jobs={jobs} sources={sources} runs={runs} issues={issues} onRun={setRunId} onIssue={setIssue} onRuns={() => { setHistoryKind('runs'); setSection('history'); }} onQuality={() => setSection('quality')}/>
+        <Overview health={health} jobs={jobs} sources={sources} runs={runs} issues={issues} onRun={setRunId} onIssue={setIssue} onRuns={() => openHistory()} onQuality={() => setSection('quality')}/>
       </>}
 
       {section === 'workflow' && <WorkflowPage key={JSON.stringify(workflow)} initial={workflow} onRun={setRunId}/>}
 
       {section === 'history' && <>
         <Tabs value={historyKind} onChange={setHistoryKind} items={historyTabs}/>
-        {historyKind === 'runs' ? <>
-          <div className="management-toolbar">
-            <div className="header-actions"><button className="light-button" onClick={() => setOperation({ kind: 'manual-ingestion' })}>Lấy dữ liệu thủ công</button></div>
-            <span className="subtle">20 lượt gần nhất; mở “Toàn bộ lượt chạy” để phân trang toàn bộ lịch sử.</span>
-          </div>
-          <RunsPanel runs={runs} jobs={jobs.data} sources={sources.data} onSelect={setRunId}/>
-        </> : <OperationsHistory key={historyKind} kind={historyKind === 'all-runs' ? 'runs' : historyKind} onRun={setRunId} onWorkflow={openWorkflow}/>}
+        {historyKind === 'runs'
+          ? <JobRunHistory key={historyJob ?? 'all'} jobs={jobs} sources={sources.data} initialJobId={historyJob} onRun={setRunId}/>
+          : <OperationsHistory key={historyKind} kind={historyKind} onRun={setRunId}
+              onRaw={setRawId} onWorkflow={openWorkflow} onOutput={openOutput}/>}
       </>}
 
       {section === 'jobs' && <>
@@ -140,10 +159,9 @@ function Dashboard() {
               ? <><button className="primary-button" onClick={() => setOperation({ kind: 'create-job' })}>Tạo job</button><button className="light-button" onClick={() => setOperation({ kind: 'manual-ingestion' })}>Lấy dữ liệu thủ công</button></>
               : <button className="primary-button" onClick={() => setOperation({ kind: 'upsert-source' })}>Thêm nguồn dữ liệu</button>}
           </div>
-          <span className="subtle">{writeNote}</span>
         </div>
         {jobsTab === 'jobs'
-          ? <JobsPage onSource={openSources} jobs={jobs} sources={sources.data} runs={runs.data} onRun={setRunId} onOperation={setOperation} linkedId={jobLink}/>
+          ? <JobsPage onHistory={openHistory} onSource={openSources} jobs={jobs} sources={sources.data} runs={runs.data} onRun={setRunId} onOperation={setOperation} linkedId={jobLink}/>
           : <SourcesPage onJob={openJobs} sources={sources} jobs={jobs.data} runs={runs.data} onRun={setRunId} onOperation={setOperation} linkedId={sourceLink}/>}
       </>}
 
@@ -155,8 +173,7 @@ function Dashboard() {
           <>
             <div className="management-toolbar">
               <div className="header-actions"><button className="light-button" onClick={() => setOperation({ kind: 'validate-pending' })}>Validate dữ liệu chờ</button></div>
-              <span className="subtle">{writeNote}</span>
-            </div>
+                </div>
             <DataQualityPage key={`${qualityRun}-${qualityRaw}-${qualityView}`} initialTab={qualityView} rawFilter={qualityRaw} onRaw={setRawId} openIssues={issues} results={results} versions={versions} rules={q.rules} onSelect={setIssue} onRun={setRunId} runFilter={qualityRun} clearRunFilter={() => { setQualityRun(null); setQualityRaw(null); }}/>
           </>
         ) : qualityTab === 'financial' ? (
@@ -167,16 +184,16 @@ function Dashboard() {
       </>}
 
       {section === 'ai' && <AiOperationsPage onRun={setRunId}/>}
-      {section === 'data' && <DataBrowser onRun={setRunId} onRaw={setRawId}/>}
+      {section === 'data' && <DataBrowser key={JSON.stringify(dataSelection)} initial={dataSelection} onBack={dataOrigin ? returnToOrigin : undefined} onRun={setRunId} onRaw={setRawId}/>}
 
       {section === 'system' && <>
-        <Tabs value={systemTab} onChange={setSystemTab} items={[['status', 'Trạng thái & độ phủ'], ['market', 'Dữ liệu thị trường'], ['api', 'Danh mục & tài liệu API']]}/>
-        {systemTab === 'status' ? <RuntimePage onWorkflow={openWorkflow}/> : systemTab === 'market' ? <MarketDataAdminPage/> : <CatalogMaintenancePanel/>}
+        <Tabs value={systemTab} onChange={setSystemTab} items={[['status', 'Kết nối'], ['coverage', 'Độ phủ dữ liệu'], ['market', 'Dữ liệu thị trường'], ['api', 'Danh mục & tài liệu API']]}/>
+        {systemTab === 'status' ? <RuntimePage/> : systemTab === 'coverage' ? <CoverageRemediationPanel onWorkflow={openWorkflow}/> : systemTab === 'market' ? <MarketDataAdminPage/> : <CatalogMaintenancePanel/>}
       </>}
     </div>
-    <RunDrawer onRaw={id => { setRunId(null); setRawId(id); }} onIssue={value => { setRunId(null); setIssue(value); }} id={runId} onClose={() => setRunId(null)} onOperation={setOperation} onJob={id => { setRunId(null); openJobs(id); }} onSource={id => { setRunId(null); openSources(id); }} onQuality={id => { setRunId(null); openQuality(id, null, 'validation'); }}/>
+    <RunDrawer onLinkedRun={setRunId} key={runId ?? 'none'} onOutput={openOutput} onProcess={id => openWorkflow({ mode: 'PROCESS_RUN', runId: id })} onRaw={id => { setRunId(null); setRawId(id); }} onIssue={value => { setRunId(null); setIssue(value); }} id={runId} onClose={() => setRunId(null)} onOperation={setOperation} onJob={id => { setRunId(null); openJobs(id); }} onSource={id => { setRunId(null); openSources(id); }} onQuality={id => { setRunId(null); openQuality(id, null, 'validation'); }}/>
     <ValidationDrawer onRaw={id => { setIssue(null); setRawId(id); }} issue={issue} onClose={() => setIssue(null)} onRun={setRunId} onWorkflow={openWorkflow}/>
-    <RawPayloadDrawer id={rawId} onClose={() => setRawId(null)} onRun={id => { setRawId(null); setRunId(id); }} onIssue={value => { setRawId(null); setIssue(value); }} onOperation={value => { setRawId(null); setOperation(value); }} onQuality={(payloadId, ingestionRunId) => { setRawId(null); openQuality(ingestionRunId, payloadId, 'validation'); }} onVersions={id => { setRawId(null); openQuality(id, null, 'versions'); }}/>
+    <RawPayloadDrawer key={rawId ?? 'none'} onOutput={openOutput} id={rawId} onClose={() => setRawId(null)} onRun={id => { setRawId(null); setRunId(id); }} onIssue={value => { setRawId(null); setIssue(value); }} onOperation={value => { setRawId(null); setOperation(value); }} onQuality={(payloadId, ingestionRunId) => { setRawId(null); openQuality(ingestionRunId, payloadId, 'validation'); }} onVersions={id => { setRawId(null); openQuality(id, null, 'versions'); }}/>
     {operation && <OperationDrawer operation={operation} sources={sources.data} onClose={() => setOperation(null)} onRun={setRunId}/>}
     {trackedCommand && <CommandTracker id={trackedCommand} onRun={setRunId} onCommand={setTrackedCommand}/>}
   </AdminLayout>;

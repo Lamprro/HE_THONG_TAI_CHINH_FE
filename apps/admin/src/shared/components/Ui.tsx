@@ -36,5 +36,5 @@ export function Drawer({ title, subtitle, onClose, children }: { title: string; 
     document.addEventListener('keydown', onKeyDown);
     return () => { document.removeEventListener('keydown', onKeyDown); previous?.focus(); };
   }, []);
-  return <div className="drawer-backdrop" onMouseDown={onClose}><aside ref={dialog} tabIndex={-1} className="drawer" role="dialog" aria-modal="true" aria-label={title} onMouseDown={event => event.stopPropagation()}><div className="drawer-head"><div><div className="eyebrow">TOKEN BURNER / CHI TIẾT</div><h2>{title}</h2>{subtitle && <p className="subtle">{subtitle}</p>}</div><button className="icon-button" aria-label="Close" onClick={onClose}>✕</button></div><div className="drawer-body">{children}</div></aside></div>;
+  return <div className="drawer-backdrop" onMouseDown={onClose}><aside ref={dialog} tabIndex={-1} className="drawer" role="dialog" aria-modal="true" aria-label={title} onMouseDown={event => event.stopPropagation()}><div className="drawer-head"><div><h2>{title}</h2>{subtitle && <p className="subtle">{subtitle}</p>}</div><button className="icon-button" aria-label="Close" onClick={onClose}>✕</button></div><div className="drawer-body">{children}</div></aside></div>;
 }

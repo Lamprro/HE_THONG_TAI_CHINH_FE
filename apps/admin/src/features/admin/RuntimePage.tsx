@@ -3,8 +3,6 @@ import { API_BASE, getJson } from '../../shared/api/client';
 import type { AdminRuntime } from '../../shared/api/admin-contract';
 import { Panel, QueryState } from '../../shared/components/Ui';
 import { ApiResult } from './Records';
-import { CoverageRemediationPanel } from './CoverageRemediationPanel';
-import type { WorkflowSelection } from './WorkflowPage';
 
 const cards = [
   ['python-health', 'Python · trạng thái thực qua adapter Java', '/api/external-financial-data/health'],
@@ -31,14 +29,9 @@ function RuntimeStatusPanel() {
   </Panel>;
 }
 
-export function RuntimePage({ onWorkflow }: { onWorkflow?: (selection: WorkflowSelection) => void }) {
+export function RuntimePage() {
   return <div className="admin-stack">
-    <p>Java UP không chứng minh Python, nhà cung cấp hoặc scheduler đang hoạt động. Lịch lấy từ cron và trạng thái bật của từng job. Xem lượt chạy trong mục Tác vụ & lịch sử.</p>
-    <CoverageRemediationPanel onWorkflow={onWorkflow} />
     <RuntimeStatusPanel />
-    <Panel title="Tài liệu API quản trị">
-      <a href={API_BASE + '/admin-api-docs/index.html'} target="_blank" rel="noreferrer">Mở Swagger UI</a>
-    </Panel>
     {cards.map(([id, title, path]) => <RuntimeCard key={id} id={id} title={title} path={path}/>)}
   </div>;
 }

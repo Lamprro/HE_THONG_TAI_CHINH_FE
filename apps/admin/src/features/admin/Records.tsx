@@ -1,20 +1,31 @@
 import { useState } from 'react';
 import type { ReactNode } from 'react';
+import { statusLabels } from './dataViews';
 import { Drawer } from '../../shared/components/Ui';
 import { dateTime, safeObject, safeText } from '../../shared/utils/format';
 
 export type Row = Record<string, unknown>;
-const preferred = ['symbol', 'source_symbol', 'title', 'name', 'code', 'operation', 'provider', 'action', 'status', 'result_status', 'handling_status', 'rule_code', 'message', 'metric_code', 'period_end', 'trading_date', 'observation_date', 'close_price', 'value', 'statement_type', 'data_domain', 'source_code', 'created_at', 'checked_at'];
+const preferred = ['symbol', 'version_code', 'item_code', 'item_name', 'index_code', 'price_timestamp', 'source_symbol', 'title', 'name', 'code', 'operation', 'provider', 'action', 'status', 'result_status', 'handling_status', 'rule_code', 'message', 'metric_code', 'period_end', 'trading_date', 'observation_date', 'close_price', 'value', 'statement_type', 'data_domain', 'source_code', 'created_at', 'checked_at'];
 const auditColumns = ['event_type', 'http_method', 'request_path', 'http_status', 'reason', 'created_at'];
-const labels: Record<string,string> = { event_type: 'Thao tác', http_method: 'Phương thức', request_path: 'Chức năng', http_status: 'Mã HTTP', reason: 'Lý do', created_at: 'Thời điểm' };
+const labels: Record<string,string> = { event_type: 'Thao tác', http_method: 'Phương thức', request_path: 'Chức năng', http_status: 'Mã HTTP', reason: 'Lý do', created_at: 'Thời điểm',
+  status: 'Trạng thái', result_status: 'Kết quả', handling_status: 'Xử lý', data_domain: 'Nhóm dữ liệu',
+  version_code: 'Phiên bản', symbol: 'Mã', source_symbol: 'Mã nguồn', source_code: 'Nguồn',
+  rule_code: 'Luật', message: 'Thông báo', checked_at: 'Kiểm tra lúc', period_end: 'Kỳ kết thúc',
+  trading_date: 'Ngày giao dịch', price_timestamp: 'Thời điểm giá', close_price: 'Giá đóng cửa',
+  metric_code: 'Chỉ số', statement_type: 'Loại báo cáo', value: 'Giá trị', unit: 'Đơn vị',
+  item_code: 'Mã chỉ tiêu', item_name: 'Chỉ tiêu', id: 'ID', row_count: 'Số dòng',
+  ingestion_run_id: 'ID lượt chạy', data_version_id: 'ID phiên bản', raw_payload_id: 'ID raw',
+  is_current: 'Hiện hành', is_canonical: 'Bản chuẩn',
+};
 function text(key: string, value: unknown) {
   if (value === null || value === undefined) return '—';
+  if (['status', 'result_status'].includes(key) && typeof value === 'string') return statusLabels[value] ?? value;
   if (typeof value === 'object') return Array.isArray(value) ? `${value.length} mục` : 'Chi tiết';
-  if (key.endsWith('_at') && typeof value === 'string') return dateTime(value);
+  if ((key.endsWith('_at') || key === 'price_timestamp') && typeof value === 'string') return dateTime(value);
   return safeText(String(value));
 }
 export function RecordDetail({ row }: { row: Row }) {
-  return <dl className="record-detail">{Object.entries(row).map(([key, value]) => <div key={key}><dt>{key.replaceAll('_', ' ')}</dt><dd>{value && typeof value === 'object' ? <details><summary>Xem nội dung</summary><pre>{safeObject(value)}</pre></details> : <span className="break">{text(key, value)}</span>}</dd></div>)}</dl>;
+  return <dl className="record-detail">{Object.entries(row).map(([key, value]) => <div key={key}><dt>{labels[key] ?? key.replaceAll('_', ' ')}</dt><dd>{value && typeof value === 'object' ? <details><summary>Xem nội dung</summary><pre>{safeObject(value)}</pre></details> : <span className="break">{text(key, value)}</span>}</dd></div>)}</dl>;
 }
 export function Records({ rows, onRun, onRaw, actions }: { rows: Row[]; onRun?: (id: string) => void; onRaw?: (id: string) => void; actions?: (row: Row) => ReactNode }) {
   const [selected, setSelected] = useState<Row | null>(null);
