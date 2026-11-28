@@ -1,7 +1,7 @@
 import test from 'node:test';
 import assert from 'node:assert/strict';
 import { formatKey } from '../src/shared/structured-keys.ts';
-import { tradingToday, date } from '../src/shared/format.ts';
+import { tradingToday, date, decimal } from '../src/shared/format.ts';
 
 test('StructuredView formatKey translates financial terms into Vietnamese', () => {
   assert.equal(formatKey('summary'), 'Tóm tắt');
@@ -14,6 +14,12 @@ test('StructuredView formatKey translates financial terms into Vietnamese', () =
 test('tradingToday formats current date in Vietnam Asia/Ho_Chi_Minh', () => {
   const today = tradingToday();
   assert.match(today, /^\d{4}-\d{2}-\d{2}$/);
+});
+
+test('decimal displays values serialized in scientific notation without rounding', () => {
+  assert.equal(decimal('3.2567425051243E+13'), '32.567.425.051.243');
+  assert.equal(decimal('9.007199254740993E+15'), '9.007.199.254.740.993');
+  assert.equal(decimal('-5E-3'), '-0,005');
 });
 
 test('date formats ISO dates cleanly into vi-VN string', () => {

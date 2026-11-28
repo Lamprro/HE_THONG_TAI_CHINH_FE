@@ -91,9 +91,10 @@ export function FinancialScenarioModal({
             <div className="scenarios-matrix">
               {data.scenarios.map(sc => {
                 const calculated = data.calculatedValues?.find(value => value.metric_code === sc.metric_code);
+                const unit = calculated?.unit === 'VND_PER_SHARE' ? 'VND/cổ phiếu' : calculated?.unit;
                 return <div key={sc.metric_code} className="metric-scenario-group">
                   <h3 className="metric-title">{metricNames[sc.metric_code] || sc.metric_code}</h3>
-                  {calculated?.base_value != null && <p className="muted">Giá trị gốc {decimal(calculated.base_value)} {calculated.unit}</p>}
+                  {calculated?.base_value != null && <p className="muted">Giá trị gốc {decimal(calculated.base_value)} {unit}</p>}
                   <div className="three-scenarios-grid">
                     {/* Bear */}
                     <div className="scenario-col bear">
@@ -105,7 +106,7 @@ export function FinancialScenarioModal({
                         </span>
                       </div>
                       <p className="scenario-rationale">{sc.bear.rationale}</p>
-                      {calculated?.bear != null && <p>{decimal(calculated.bear)} {calculated.unit}</p>}
+                      {calculated?.bear != null && <p>{decimal(calculated.bear)} {unit}</p>}
                     </div>
 
                     {/* Base */}
@@ -118,7 +119,7 @@ export function FinancialScenarioModal({
                         </span>
                       </div>
                       <p className="scenario-rationale">{sc.base.rationale}</p>
-                      {calculated?.base != null && <p>{decimal(calculated.base)} {calculated.unit}</p>}
+                      {calculated?.base != null && <p>{decimal(calculated.base)} {unit}</p>}
                     </div>
 
                     {/* Bull */}
@@ -131,7 +132,7 @@ export function FinancialScenarioModal({
                         </span>
                       </div>
                       <p className="scenario-rationale">{sc.bull.rationale}</p>
-                      {calculated?.bull != null && <p>{decimal(calculated.bull)} {calculated.unit}</p>}
+                      {calculated?.bull != null && <p>{decimal(calculated.bull)} {unit}</p>}
                     </div>
                   </div>
                 </div>;

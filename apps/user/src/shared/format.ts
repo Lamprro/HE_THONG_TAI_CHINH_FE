@@ -5,7 +5,19 @@ export function text(value: unknown, fallback = '—'): string {
 // Keep decimal strings exact. No multiplication by unitScale or conversion of bigint IDs.
 export function decimal(value: unknown): string {
   if (value === null || value === undefined || value === '') return '—';
-  const raw = String(value);
+  let raw = String(value);
+  const scientific = /^(-?)(\d+)(?:\.(\d+))?[eE]([+-]?\d+)$/.exec(raw);
+  if (scientific) {
+    const [, sign, whole, fraction = '', power] = scientific;
+    const exponent = Number(power);
+    if (!Number.isInteger(exponent) || Math.abs(exponent) > 100) return '—';
+    const digits = whole + fraction;
+    const point = whole.length + exponent;
+    const expanded = point <= 0 ? '0.' + '0'.repeat(-point) + digits
+      : point >= digits.length ? digits + '0'.repeat(point - digits.length)
+      : digits.slice(0, point) + '.' + digits.slice(point);
+    raw = sign + expanded;
+  }
   if (!/^-?\d+(\.\d+)?$/.test(raw)) return '—';
   const [integer, fraction] = raw.split('.');
   return integer.replace(/\B(?=(\d{3})+(?!\d))/g, '.') + (fraction ? ',' + fraction : '');
