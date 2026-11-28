@@ -461,42 +461,36 @@ export function CoverageRemediationPanel({ onWorkflow }: { onWorkflow?: (selecti
 
           <div className="detail-section">
             <div className="eyebrow">CẤU HÌNH BÙ ĐẮP BÁO CÁO TÀI CHÍNH</div>
-            <div style={{ display: 'grid', gridTemplateColumns: '1fr 1fr 1fr', gap: '0.5rem', marginTop: '0.5rem' }}>
-              <div>
-                <label style={{ display: 'block', fontSize: '0.75rem', marginBottom: 2 }}>Loại BCTC</label>
+            <div className="admin-form-grid">
+              <label>Loại BCTC
                 <select
                   value={selectedStatementType}
                   onChange={e => setSelectedStatementType(e.target.value)}
-                  style={{ width: '100%' }}
                 >
                   <option value="balance_sheet">Cân đối kế toán</option>
                   <option value="income_statement">Kết quả kinh doanh</option>
                   <option value="cash_flow">Lưu chuyển tiền tệ</option>
                 </select>
-              </div>
-              <div>
-                <label style={{ display: 'block', fontSize: '0.75rem', marginBottom: 2 }}>Kỳ báo cáo</label>
+              </label>
+              <label>Kỳ báo cáo
                 <select
                   value={selectedPeriod}
                   onChange={e => setSelectedPeriod(e.target.value)}
-                  style={{ width: '100%' }}
                 >
                   <option value="quarter">Theo quý</option>
                   <option value="year">Theo năm</option>
                 </select>
-              </div>
-              <div>
-                <label style={{ display: 'block', fontSize: '0.75rem', marginBottom: 2 }}>Nguồn cung cấp</label>
+              </label>
+              <label>Nguồn cung cấp
                 <select
                   value={selectedSource}
                   onChange={e => setSelectedSource(e.target.value)}
-                  style={{ width: '100%' }}
                 >
                   {statementProviders.map(p => (
                     <option key={p} value={p}>{p}</option>
                   ))}
                 </select>
-              </div>
+              </label>
             </div>
           </div>
 

@@ -345,8 +345,8 @@ export function MarketDataAdminPage() {
         {/* SubTab 2: Security Prices */}
         {subTab === 'prices' && (
           <div className="admin-stack">
-            <div className="toolbar filters" style={{ display: 'flex', gap: '0.75rem', alignItems: 'center', marginBottom: '1rem' }}>
-              <label style={{ display: 'flex', alignItems: 'center', gap: '0.5rem', fontWeight: 600 }}>
+            <div className="toolbar filters">
+              <label className="compact-filter">
                 Mã cổ phiếu:
                 <input
                   type="text"
@@ -355,7 +355,6 @@ export function MarketDataAdminPage() {
                     setStockSymbol(e.target.value.toUpperCase());
                     stockPagination.setPage(0);
                   }}
-                  style={{ width: '120px', padding: '0.35rem 0.6rem', fontWeight: 700 }}
                   placeholder="VD: FPT"
                 />
               </label>
@@ -431,15 +430,13 @@ export function MarketDataAdminPage() {
             <p>
               Thao tác này sẽ quét danh mục chỉ số (VNINDEX, VN30, HNX-INDEX...) và đăng ký/cập nhật các job định kỳ trong hệ thống.
             </p>
-            <div style={{ marginBottom: '1rem' }}>
-              <label style={{ display: 'block', fontSize: '0.85rem', marginBottom: 3 }}>Lý do thực hiện (Audit reason)</label>
+            <label className="ledger-field">Lý do thực hiện
               <input
                 type="text"
                 value={seedIndicesReason}
                 onChange={e => setSeedIndicesReason(e.target.value)}
-                style={{ width: '100%' }}
               />
-            </div>
+            </label>
             <div className="toolbar" style={{ display: 'flex', gap: '0.5rem' }}>
               <button
                 className="primary-button"
@@ -470,15 +467,13 @@ export function MarketDataAdminPage() {
             <p>
               Thao tác này sẽ đồng bộ cấu hình macro series vào bảng quản trị và kích hoạt pipeline vĩ mô.
             </p>
-            <div style={{ marginBottom: '1rem' }}>
-              <label style={{ display: 'block', fontSize: '0.85rem', marginBottom: 3 }}>Lý do thực hiện (Audit reason)</label>
+            <label className="ledger-field">Lý do thực hiện
               <input
                 type="text"
                 value={seedMacroReason}
                 onChange={e => setSeedMacroReason(e.target.value)}
-                style={{ width: '100%' }}
               />
-            </div>
+            </label>
             <div className="toolbar" style={{ display: 'flex', gap: '0.5rem' }}>
               <button
                 className="primary-button"

@@ -84,14 +84,13 @@ export function FinancialQualityPage() {
         }
       >
         {/* Symbol Selector Bar */}
-        <div className="toolbar filters" style={{ display: 'flex', gap: '1rem', alignItems: 'center', marginBottom: '1rem' }}>
-          <label style={{ display: 'flex', alignItems: 'center', gap: '0.5rem', fontWeight: 600 }}>
+        <div className="toolbar filters">
+          <label className="compact-filter">
             Mã chứng khoán:
             <input
               type="text"
               value={symbol}
               onChange={e => setSymbol(e.target.value.toUpperCase())}
-              style={{ width: '120px', padding: '0.35rem 0.6rem', fontWeight: 700 }}
               placeholder="VD: FPT"
             />
           </label>
@@ -185,29 +184,20 @@ export function FinancialQualityPage() {
 
             <div style={{ maxWidth: '480px', marginTop: '1rem', background: 'var(--panel-alt, #f8fafc)', padding: '1rem', borderRadius: 4, border: '1px solid var(--border, #e2e8f0)' }}>
               <div style={{ marginBottom: '0.75rem' }}>
-                <label style={{ display: 'block', fontSize: '0.85rem', marginBottom: 3 }}>Mã chứng khoán</label>
-                <input type="text" value={symbol} disabled style={{ width: '100%', fontWeight: 700 }} />
+                <label>Mã chứng khoán<input type="text" value={symbol} disabled /></label>
               </div>
-              <div style={{ display: 'grid', gridTemplateColumns: '1fr 1fr', gap: '0.5rem', marginBottom: '0.75rem' }}>
-                <div>
-                  <label style={{ display: 'block', fontSize: '0.85rem', marginBottom: 3 }}>Từ ngày</label>
-                  <input type="date" value={recalcFrom} onChange={e => setRecalcFrom(e.target.value)} style={{ width: '100%' }} />
-                </div>
-                <div>
-                  <label style={{ display: 'block', fontSize: '0.85rem', marginBottom: 3 }}>Đến ngày</label>
-                  <input type="date" value={recalcTo} onChange={e => setRecalcTo(e.target.value)} style={{ width: '100%' }} />
-                </div>
+              <div className="admin-form-grid" style={{ marginBottom: '0.75rem' }}>
+                <label>Từ ngày<input type="date" value={recalcFrom} onChange={e => setRecalcFrom(e.target.value)} /></label>
+                <label>Đến ngày<input type="date" value={recalcTo} onChange={e => setRecalcTo(e.target.value)} /></label>
               </div>
-              <div style={{ marginBottom: '1rem' }}>
-                <label style={{ display: 'block', fontSize: '0.85rem', marginBottom: 3 }}>Lý do tính lại (Audit reason)</label>
+              <label className="ledger-field">Lý do tính lại
                 <input
                   type="text"
                   value={recalcReason}
                   onChange={e => setRecalcReason(e.target.value)}
                   placeholder="Nhập lý do thực hiện tính lại chỉ số..."
-                  style={{ width: '100%' }}
                 />
-              </div>
+              </label>
 
               <button
                 className="primary-button"

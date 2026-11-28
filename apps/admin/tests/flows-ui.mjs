@@ -35,6 +35,7 @@ await page.route('**/api/**',async route=>{const request=route.request(),url=new
   if(path==='/api/admin/console/session')return reply({ authenticated: true, principal: 'fixture-admin', email: null, authorities: ['ROLE_ADMIN'] });if(path==='/api/health')return reply({status:'UP'});
   if(path==='/api/ingestion-jobs')return reply([job]);if(path==='/api/data-sources')return reply([source]);if(path==='/api/securities')return reply([{id:id(5),symbol:'FPT',exchange:'HOSE',active:true}]);
   if(path==='/api/admin/console/summary')return reply({jobs:[{is_active:true,count:1}],commands:[],runs:[],versions:[],validation:[]});
+  if(path==='/api/admin/console/datasets')return reply([{name:'market_prices',available:true,columns:['id','security_id','trading_date']}]);
   if(path==='/api/admin/console/commands/ai')return reply({content:[...commands.values()].filter(command=>command.action==='FORECAST_PREVIEW'&&command.result_json?.eligible).map(command=>({id:command.id,action:command.action,status:command.status,outcome:'READY_FOR_EXECUTION',createdAt:runSummary.createdAt})),totalElements:1});
   if(path==='/api/admin/llm/runs')return reply({content:[runSummary],totalElements:1});
   if(path==='/api/admin/llm/runs/'+forecastRun)return reply({id:forecastRun,task_code:'FINANCIAL_SCENARIOS',status:'FAILED',model_name:'fixture-model',request_metadata:{forecast_request:{securityId:id(5)}},error_message:'PROVIDER_RATE_LIMIT',attempts:[{attempt_no:1,http_status:429}],written_results:[{id:id(61),is_current:false,quality_status:"VALID",result_json:{overview:"Kịch bản đã lưu"}}],validations:[{rule_code:'FORECAST_RULE',result_status:'FAIL'}]});
@@ -55,9 +56,74 @@ await page.route('**/api/**',async route=>{const request=route.request(),url=new
   if(path.includes('/data/'))return reply({rows:[],total:0});return reply([]);
 });
 const button=name=>page.getByRole('button',{name,exact:true});
+const fieldStyle = locator => locator.evaluate(element => {
+  const style = getComputedStyle(element);
+  return [style.height, style.fontSize, style.borderRadius, style.borderColor, style.paddingInlineStart];
+});
+const views = [
+  ['Tổng quan', []],
+  ['Job & nguồn', ['Nguồn dữ liệu', 'Job lấy dữ liệu']],
+  ['Luồng dữ liệu', []],
+  ['Tác vụ & lịch sử', ['Kiểm tra & ghi dữ liệu', 'Tác vụ nền', 'Lịch sử job']],
+  ['Chất lượng dữ liệu', ['Phiên bản dữ liệu', 'Luật validation', 'Kết quả validation']],
+  ['Tra cứu dữ liệu', []],
+  ['Danh mục mã', ['Mã chứng khoán', 'Công ty']],
+  ['Vận hành AI', ['Phân tích tin', 'Khôi phục & duyệt', 'Lịch sử LLM', 'Prompt & cấu hình', 'Dự báo']],
+  ['Hệ thống', ['Độ phủ dữ liệu', 'Dữ liệu thị trường', 'Tra cứu Giá Canonical cổ phiếu', 'Chỉ số thị trường & Rổ thành phần', 'Danh mục & tài liệu API', 'Kết nối']],
+];
+async function assertPageControls(scope, view) {
+  const mismatched = await scope.locator('input:not([type=checkbox], [type=radio], [type=hidden]), select, textarea').evaluateAll(fields =>
+    fields.filter(field => {
+      if (!field.getClientRects().length || getComputedStyle(field).visibility === 'hidden') return false;
+      const style = getComputedStyle(field);
+      const minimumHeight = field.matches('textarea') ? 88 : field.matches('select[multiple]') ? 136 : 42;
+      const {height, left, right} = field.getBoundingClientRect();
+      const outsideViewport = !field.closest('.table-scroll') && (left < -1 || right > innerWidth + 1);
+      return style.fontSize !== '14px' || style.borderRadius !== '8px' ||
+        outsideViewport || (minimumHeight === 42 ? Math.abs(height - minimumHeight) > 1 : height < minimumHeight);
+    }).map(field => field.getAttribute('aria-label') || field.labels?.[0]?.textContent || field.outerHTML.slice(0, 100)),
+  );
+  assert.deepEqual(mismatched, [], view);
+}
 try{
   await page.goto(`http://127.0.0.1:${server.address().port}`);await page.getByLabel('Tên đăng nhập').fill('fixture-admin');await page.getByLabel('Mật khẩu').fill('fixture-password');await button('Đăng nhập').click();
   await page.getByText('1 tác vụ đang chờ',{exact:true}).waitFor();
+  const navigation = page.getByRole('navigation', {name:'Điều hướng quản trị'});
+  const main = page.getByRole('main');
+  for (const width of [1440, 390]) {
+    await page.setViewportSize({width, height: 1000});
+    for (const [section, tabs] of views) {
+      const item = navigation.getByRole('button', {name:section, exact:true});
+      await item.click();
+      assert.equal(await item.getAttribute('aria-current'), 'page');
+      await assertPageControls(main, `${width}px / ${section}`);
+      for (const tab of tabs) {
+        await main.getByRole('button', {name:tab, exact:true})
+          .or(main.getByRole('tab', {name:tab, exact:true})).click();
+        await assertPageControls(main, `${width}px / ${section} / ${tab}`);
+      }
+    }
+  }
+  await page.setViewportSize({width:1440,height:1000});
+  await button('Giao diện tối').click();
+  await navigation.getByRole('button', {name:'Luồng dữ liệu', exact:true}).click();
+  await assertPageControls(main, 'Luồng dữ liệu / Giao diện tối');
+  await button('Giao diện sáng').click();
+  await button('Job & nguồn').click();
+  const jobFilter = page.getByPlaceholder('Tên, mã job hoặc mã nguồn');
+  const jobStyle = await fieldStyle(jobFilter);
+  assert.deepEqual(await fieldStyle(page.locator('.toolbar.filters select').first()), jobStyle);
+  await button('Luồng dữ liệu').click();
+  const workflowMode = page.getByLabel('Cách xử lý',{exact:true});
+  const workflowDate = page.getByLabel('Từ ngày',{exact:true});
+  assert.deepEqual(await fieldStyle(workflowMode), jobStyle);
+  assert.deepEqual(await fieldStyle(workflowDate), jobStyle);
+  await page.setViewportSize({ width: 390, height: 844 });
+  await page.waitForFunction(() => {
+    const fields = [...document.querySelectorAll('.admin-form-grid > label')];
+    return fields.length >= 6 && fields.every(field => field.getBoundingClientRect().right <= innerWidth);
+  });
+  await page.setViewportSize({ width: 1440, height: 1000 });
   await button('Luồng dữ liệu').click();await page.getByLabel('Nguồn dữ liệu',{exact:true}).selectOption('VN');await page.getByLabel('Mã chứng khoán/chỉ số',{exact:true}).fill('FPT');await page.getByLabel('Từ ngày',{exact:true}).fill('2026-10-01');await page.getByLabel('Đến ngày',{exact:true}).fill('2026-10-16');await page.getByLabel('Lý do xử lý',{exact:true}).fill('Reviewed source range');await button('Kiểm tra phạm vi').click();await button('Xác nhận chạy luồng').click();await page.getByText('Kết quả nghiệp vụ: ACTIVATED',{exact:true}).waitFor();assert.equal(writes[0].body.action,'INGEST_VALIDATE_BUILD');assert.equal(writes[0].body.input.symbol,'FPT');
   await button('Tác vụ & lịch sử').click();await button('Tác vụ nền').click();await button('Theo dõi / xử lý').click();await button('Hủy tác vụ đang chờ').click();await page.getByLabel('Lý do xác nhận',{exact:true}).fill('Cancel queued fixture');await button('Xác nhận xử lý tác vụ').click();await button('Kiểm tra và gửi lại').waitFor();await button('Kiểm tra và gửi lại').click();await page.getByLabel('Lý do xác nhận',{exact:true}).fill('Reviewed original result, retry');await button('Xác nhận xử lý tác vụ').click();await page.getByText('Source quota 429',{exact:true}).waitFor();assert.equal(writes.find(w=>w.path.endsWith('/retry')).body.reviewed,true);
   await button('Kiểm tra & ghi dữ liệu').click();await page.getByLabel('Trạng thái',{exact:true}).selectOption('FAIL');
