@@ -133,6 +133,18 @@ test('parseAiData safely handles object, plain string, and invalid inputs', () =
   assert.deepEqual(parseAiData(undefined), {});
 });
 
+test('parseScenarioData reads the published forecast and keeps separate limitations', () => {
+  const parsed = parseScenarioData({
+    forecasts: [{metric_code: 'STOCK_PRICE', bear: {growth_percent: '-2.5'},
+      base: {growth_percent: '0'}, bull: {growth_percent: '3.25'}}],
+    calculated_values: [{metric_code: 'STOCK_PRICE', base_value: '123456.78000000', unit: 'VND'}],
+    limitations: ['Report scope UNKNOWN: consolidation cannot be assumed.', 'Một lưu ý khác.'],
+  });
+  assert.equal(parsed.scenarios[0].bull.growth_percent, '3.25');
+  assert.equal(parsed.calculatedValues[0].base_value, '123456.78000000');
+  assert.deepEqual(parsed.limitations, ['Chưa xác định báo cáo là hợp nhất hay riêng lẻ.', 'Một lưu ý khác.']);
+});
+
 test('parseScenarioData correctly parses 3 financial scenarios (bear, base, bull)', () => {
   const scenarioJson = JSON.stringify({
     overview: 'Dự phóng kết quả kinh doanh quý 4/2026 dựa trên chu kỳ ngành thép và sản lượng Dung Quất 2.',

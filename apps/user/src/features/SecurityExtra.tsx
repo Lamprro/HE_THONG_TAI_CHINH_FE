@@ -34,7 +34,7 @@ export function AiPanel({ symbol, exchange }: { symbol: string; exchange: string
   return <>
     <section className="panel"><div className="panel-heading"><div><h2><Bot size={16} /> Kịch bản tài chính AI (LLM)</h2><span className="muted">Chỉ hiển thị kết quả đã qua kiểm định và còn hiệu lực với dữ liệu nguồn hiện tại</span></div></div>
       <QueryState loading={forecasts.isPending} error={forecasts.error} retry={forecasts.refetch}>{forecasts.data?.data.length ? <div className="scenario-grid">{forecasts.data.data.map((row, i) => <FinancialScenarioCard key={text(row.id, String(i))} row={row} />)}</div> : <div className="state"><strong>Chưa có kịch bản đủ điều kiện công bố</strong><span>Có thể chưa chạy, đã hết hiệu lực do dữ liệu nguồn đổi, hoặc chưa qua vòng kiểm định. Trang không tự gọi mô hình.</span></div>}</QueryState>
-      <Note>{forecasts.data?.meta.notes?.join(' ') || 'Kịch bản AI không phải khuyến nghị đầu tư, giá mục tiêu hay xác suất đã hiệu chỉnh.'}</Note>
+      <Note>Các kịch bản mang tính tham khảo. Giá trong kịch bản chưa được hiệu chỉnh thành giá mục tiêu.</Note>
     </section>
   </>;
 }

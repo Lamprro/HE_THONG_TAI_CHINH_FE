@@ -765,6 +765,8 @@ td.flash { animation: flash 1.2s ease-out; }
   padding-top: 8px;
   border-top: 1px solid #1c2b3d;
 }
+.ai-limitations-card ul { margin: 5px 0 0; padding-left: 1.2rem; }
+.ai-limitations-card li + li { margin-top: 4px; }
 .ai-disclaimer {
   font-size: 11px;
   color: #71859c;

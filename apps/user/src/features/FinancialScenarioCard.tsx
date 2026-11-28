@@ -1,6 +1,6 @@
 import { useState } from 'react';
 import { Bot, BookOpen, X, TrendingUp, TrendingDown, Target, ShieldCheck, Sparkles, AlertCircle } from 'lucide-react';
-import { date, text } from '../shared/format';
+import { date, decimal, text } from '../shared/format';
 import {
   parseScenarioData,
   type ScenarioDetail,
@@ -24,6 +24,16 @@ const metricNames: Record<string, string> = {
   STOCK_PRICE: 'Giá cổ phiếu',
 };
 
+function scopeLabel(value: unknown) {
+  if (value === 'CONSOLIDATED') return 'Hợp nhất';
+  if (value === 'SEPARATE') return 'Riêng lẻ';
+  return null;
+}
+
+function growthLabel(value: number | string) {
+  return (Number(value) > 0 ? '+' : '') + decimal(value) + '%';
+}
+
 export function FinancialScenarioModal({
   row,
   onClose,
@@ -33,9 +43,12 @@ export function FinancialScenarioModal({
 }) {
   const symbol = text(row.symbol, '');
   const exchange = text(row.exchange, '');
-  const quality = text(row.qualityStatus, 'VALID');
-  const targetScope = text(row.targetScope, 'CONSOLIDATED');
+  const quality = text(row.qualityStatus);
+  const scope = scopeLabel(row.targetScope);
   const data = parseScenarioData(row.data);
+  const period = row.forecastPeriodStart && row.forecastPeriodEnd
+    ? date(String(row.forecastPeriodStart)) + ' – ' + date(String(row.forecastPeriodEnd))
+    : data.horizon_period;
 
   return (
     <div className="dialog-backdrop" role="presentation" onClick={onClose}>
@@ -50,9 +63,9 @@ export function FinancialScenarioModal({
           <div className="header-meta">
             <span className="ai-brand-tag"><Bot size={15} /> Kịch bản tài chính AI</span>
             <span className="task-pill">{symbol} · {exchange}</span>
-            <span className="task-pill scope">{targetScope === 'CONSOLIDATED' ? 'Hợp nhất' : 'Riêng lẻ'}</span>
+            {scope && <span className="task-pill scope">{scope}</span>}
             <span className={`quality-chip ${quality === 'VALID' ? 'valid' : 'warning'}`}>
-              <ShieldCheck size={13} /> {quality === 'VALID' ? 'Đã kiểm định (VALID)' : quality}
+              <ShieldCheck size={13} /> {quality === 'VALID' ? 'Đạt kiểm tra dữ liệu' : quality === 'WARNING' ? 'Có cảnh báo' : quality}
             </span>
           </div>
           <button className="icon-button close-button" onClick={onClose} aria-label="Đóng popup">
@@ -60,9 +73,10 @@ export function FinancialScenarioModal({
           </button>
         </div>
 
-        <h2 className="ai-modal-title">Dự phóng kịch bản tài chính cho {symbol} ({data.horizon_period || 'Kỳ tới'})</h2>
+        <h2 className="ai-modal-title">Dự phóng kịch bản tài chính cho {symbol}</h2>
 
         <div className="ai-modal-body">
+          {period && <p className="muted">Kỳ dự báo {period}</p>}
           {data.overview && (
             <div className="ai-overview-box">
               <div className="overview-title">
@@ -75,9 +89,11 @@ export function FinancialScenarioModal({
 
           {data.scenarios && data.scenarios.length > 0 && (
             <div className="scenarios-matrix">
-              {data.scenarios.map((sc, idx) => (
-                <div key={idx} className="metric-scenario-group">
+              {data.scenarios.map(sc => {
+                const calculated = data.calculatedValues?.find(value => value.metric_code === sc.metric_code);
+                return <div key={sc.metric_code} className="metric-scenario-group">
                   <h3 className="metric-title">{metricNames[sc.metric_code] || sc.metric_code}</h3>
+                  {calculated?.base_value != null && <p className="muted">Giá trị gốc {decimal(calculated.base_value)} {calculated.unit}</p>}
                   <div className="three-scenarios-grid">
                     {/* Bear */}
                     <div className="scenario-col bear">
@@ -85,10 +101,11 @@ export function FinancialScenarioModal({
                         <TrendingDown size={14} />
                         <strong>Thận trọng (Bear)</strong>
                         <span className="growth-tag negative">
-                          {sc.bear.growth_percent > 0 ? '+' : ''}{sc.bear.growth_percent}%
+                          {growthLabel(sc.bear.growth_percent)}
                         </span>
                       </div>
                       <p className="scenario-rationale">{sc.bear.rationale}</p>
+                      {calculated?.bear != null && <p>{decimal(calculated.bear)} {calculated.unit}</p>}
                     </div>
 
                     {/* Base */}
@@ -97,10 +114,11 @@ export function FinancialScenarioModal({
                         <Target size={14} />
                         <strong>Cơ sở (Base)</strong>
                         <span className="growth-tag neutral">
-                          {sc.base.growth_percent > 0 ? '+' : ''}{sc.base.growth_percent}%
+                          {growthLabel(sc.base.growth_percent)}
                         </span>
                       </div>
                       <p className="scenario-rationale">{sc.base.rationale}</p>
+                      {calculated?.base != null && <p>{decimal(calculated.base)} {calculated.unit}</p>}
                     </div>
 
                     {/* Bull */}
@@ -109,27 +127,28 @@ export function FinancialScenarioModal({
                         <TrendingUp size={14} />
                         <strong>Khả quan (Bull)</strong>
                         <span className="growth-tag positive">
-                          {sc.bull.growth_percent > 0 ? '+' : ''}{sc.bull.growth_percent}%
+                          {growthLabel(sc.bull.growth_percent)}
                         </span>
                       </div>
                       <p className="scenario-rationale">{sc.bull.rationale}</p>
+                      {calculated?.bull != null && <p>{decimal(calculated.bull)} {calculated.unit}</p>}
                     </div>
                   </div>
-                </div>
-              ))}
+                </div>;
+              })}
             </div>
           )}
 
-          {data.limitations && (
+          {!!data.limitations?.length && (
             <div className="ai-limitations-card">
               <AlertCircle size={15} />
-              <span><strong>Giới hạn:</strong> {data.limitations}</span>
+              <div><strong>Giới hạn dữ liệu</strong><ul>{data.limitations.map(item => <li key={item}>{item}</li>)}</ul></div>
             </div>
           )}
 
           <div className="ai-modal-footer">
             <small className="ai-disclaimer">
-              Kịch bản AI được xây dựng trên dữ liệu báo cáo tài chính và tin tức đã kiểm định. Đây không phải khuyến nghị đầu tư hay cam kết lợi nhuận.
+              Các giá trị là kịch bản tham khảo và chưa được kiểm chứng về độ chính xác dự báo.
             </small>
             <button type="button" className="primary" onClick={onClose}>
               Đóng cửa sổ
@@ -147,7 +166,7 @@ export function FinancialScenarioCard({ row }: { row: Record<string, unknown> })
   const asOf = text(row.asOfDate, '');
   const pStart = text(row.forecastPeriodStart, '');
   const pEnd = text(row.forecastPeriodEnd, '');
-  const quality = text(row.qualityStatus, 'VALID');
+  const quality = text(row.qualityStatus);
   const data = parseScenarioData(row.data);
 
   const scenarioCount = data.scenarios?.length || 0;
@@ -159,7 +178,7 @@ export function FinancialScenarioCard({ row }: { row: Record<string, unknown> })
           <div className="header-meta">
             <span className="badge-horizon">Kỳ {pStart || '—'} → {pEnd || '—'}</span>
             <span className={`quality-badge ${quality === 'VALID' ? 'valid' : 'warning'}`}>
-              {quality === 'VALID' ? 'Đã kiểm định' : quality}
+              {quality === 'VALID' ? 'Đạt kiểm tra dữ liệu' : quality === 'WARNING' ? 'Có cảnh báo' : quality}
             </span>
           </div>
           {asOf && <small className="as-of-text">Dữ liệu đến {date(asOf)}</small>}
@@ -173,9 +192,9 @@ export function FinancialScenarioCard({ row }: { row: Record<string, unknown> })
               <div key={i} className="metric-pill-row">
                 <span className="metric-name">{metricNames[sc.metric_code] || sc.metric_code}:</span>
                 <span className="scenario-mini-stats">
-                  <span className="bear-pill" title="Thận trọng">{sc.bear.growth_percent > 0 ? '+' : ''}{sc.bear.growth_percent}%</span>
-                  <span className="base-pill" title="Cơ sở">{sc.base.growth_percent > 0 ? '+' : ''}{sc.base.growth_percent}%</span>
-                  <span className="bull-pill" title="Khả quan">{sc.bull.growth_percent > 0 ? '+' : ''}{sc.bull.growth_percent}%</span>
+                  <span className="bear-pill" title="Thận trọng">{growthLabel(sc.bear.growth_percent)}</span>
+                  <span className="base-pill" title="Cơ sở">{growthLabel(sc.base.growth_percent)}</span>
+                  <span className="bull-pill" title="Khả quan">{growthLabel(sc.bull.growth_percent)}</span>
                 </span>
               </div>
             ))}
@@ -190,7 +209,7 @@ export function FinancialScenarioCard({ row }: { row: Record<string, unknown> })
             title="Mở toàn văn kịch bản tài chính 3 kịch bản Bear/Base/Bull"
           >
             <BookOpen size={14} />
-            <span>Xem chi tiết 3 kịch bản ({scenarioCount} chỉ tiêu)</span>
+            <span>{scenarioCount ? 'Xem 3 kịch bản (' + scenarioCount + ' chỉ tiêu)' : 'Xem chi tiết dự báo'}</span>
           </button>
         </div>
       </article>
