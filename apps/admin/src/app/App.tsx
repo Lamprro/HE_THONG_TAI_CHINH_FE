@@ -23,6 +23,7 @@ import { RuntimePage } from '../features/admin/RuntimePage';
 import { MarketDataAdminPage } from '../features/admin/MarketDataAdminPage';
 import { WorkflowPage, type WorkflowSelection } from '../features/admin/WorkflowPage';
 import { AiOperationsPage } from '../features/admin/AiOperationsPage';
+import type { RunLink } from '../features/admin/AiRunHistory';
 import { OperationsHistory } from '../features/admin/OperationsHistory';
 import { ActiveCommandsBanner } from '../features/admin/ActiveCommandsBanner';
 import { CommandTracker } from '../features/admin/CommandTracker';
@@ -53,6 +54,7 @@ function Dashboard({ session, onLogout, logoutPending, logoutError }: {
   const [systemTab, setSystemTab] = useState<'status' | 'coverage' | 'market' | 'api'>('status');
   const [dark, setDark] = useState(false);
   const [runId, setRunId] = useState<string | null>(null);
+  const [aiRun, setAiRun] = useState<RunLink>();
   const [issue, setIssue] = useState<ValidationResult | null>(null);
   const [operation, setOperation] = useState<Operation | null>(null);
   const [jobLink, setJobLink] = useState<string | null>(null);
@@ -97,10 +99,12 @@ function Dashboard({ session, onLogout, logoutPending, logoutError }: {
     setDataOrigin(undefined);
   };
   const navigate = (next: Section) => {
+    if (next !== 'ai' || section !== 'ai') setAiRun(undefined);
     if (next === 'data') { setDataSelection(undefined); setDataOrigin(undefined); }
     if (next === 'history') setHistoryJob(undefined);
     setSection(next);
   };
+  const openAiRun = (run: RunLink) => { setAiRun(run); setTrackedCommand(null); setSection('ai'); };
   const openWorkflow = (selection: WorkflowSelection) => { setWorkflow(selection); setSection('workflow'); };
 
   return <AdminLayout section={section} setSection={navigate} dark={dark} setDark={setDark}
@@ -132,7 +136,7 @@ function Dashboard({ session, onLogout, logoutPending, logoutError }: {
         {historyKind === 'runs'
           ? <JobRunHistory key={historyJob ?? 'all'} jobs={jobs} sources={sources.data} initialJobId={historyJob} onRun={setRunId}/>
           : <OperationsHistory key={historyKind} kind={historyKind} onRun={setRunId}
-              onRaw={setRawId} onWorkflow={openWorkflow} onOutput={openOutput}/>}
+              onRaw={setRawId} onWorkflow={openWorkflow} onOutput={openOutput} onAiRun={openAiRun}/>}
       </>}
 
       {section === 'jobs' && <>
@@ -158,7 +162,7 @@ function Dashboard({ session, onLogout, logoutPending, logoutError }: {
         <DataQualityPage key={`${qualityRun}-${qualityRaw}-${qualityView}`} initialTab={qualityView} rawFilter={qualityRaw} onRaw={setRawId} openIssues={issues} results={results} versions={versions} rules={q.rules} onSelect={setIssue} onRun={setRunId} runFilter={qualityRun} clearRunFilter={() => { setQualityRun(null); setQualityRaw(null); }}/>
       </>}
 
-      {section === 'ai' && <AiOperationsPage onRun={setRunId}/>}
+      {section === 'ai' && <AiOperationsPage key={aiRun?.id ?? 'ai'} onRun={setRunId} initialRun={aiRun}/>}
       {section === 'data' && <DataBrowser key={JSON.stringify(dataSelection)} initial={dataSelection} onBack={dataOrigin ? returnToOrigin : undefined} onRun={setRunId} onRaw={setRawId}/>}
 
       {section === 'system' && <>
@@ -170,6 +174,6 @@ function Dashboard({ session, onLogout, logoutPending, logoutError }: {
     <ValidationDrawer onRaw={id => { setIssue(null); setRawId(id); }} issue={issue} onClose={() => setIssue(null)} onRun={setRunId} onWorkflow={openWorkflow}/>
     <RawPayloadDrawer key={rawId ?? 'none'} onOutput={openOutput} id={rawId} onClose={() => setRawId(null)} onRun={id => { setRawId(null); setRunId(id); }} onIssue={value => { setRawId(null); setIssue(value); }} onOperation={value => { setRawId(null); setOperation(value); }} onQuality={(payloadId, ingestionRunId) => { setRawId(null); openQuality(ingestionRunId, payloadId, 'validation'); }} onVersions={id => { setRawId(null); openQuality(id, null, 'versions'); }}/>
     {operation && <OperationDrawer operation={operation} sources={sources.data} onClose={() => setOperation(null)} onRun={setRunId}/>}
-    {trackedCommand && <CommandTracker id={trackedCommand} onRun={setRunId} onCommand={setTrackedCommand}/>}
+    {trackedCommand && <CommandTracker id={trackedCommand} onRun={setRunId} onCommand={setTrackedCommand} onAiRun={openAiRun}/>}
   </AdminLayout>;
 }

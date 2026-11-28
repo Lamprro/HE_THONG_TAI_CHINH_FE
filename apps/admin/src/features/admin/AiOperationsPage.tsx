@@ -13,9 +13,9 @@ const targets = ['NET_PROFIT_AFTER_TAX', 'PRETAX_PROFIT', 'TOTAL_ASSETS', 'OWNER
 type ForecastSeed = { request: Row; commandId: string };
 type RecoverySeed = { run: string; article: string };
 
-export function AiOperationsPage({ onRun }: { onRun: (id: string) => void }) {
-  const [tab, setTab] = useState('forecast');
-  const [selection, setSelection] = useState<RunLink | null>(null);
+export function AiOperationsPage({ onRun, initialRun }: { onRun: (id: string) => void; initialRun?: RunLink }) {
+  const [tab, setTab] = useState(initialRun ? 'history' : 'forecast');
+  const [selection, setSelection] = useState<RunLink | null>(initialRun ?? null);
   const [forecastSeed, setForecastSeed] = useState<ForecastSeed>();
   const [recoverySeed, setRecoverySeed] = useState<RecoverySeed>();
   const openRun = (run: RunLink) => { setSelection(run); setTab('history'); };

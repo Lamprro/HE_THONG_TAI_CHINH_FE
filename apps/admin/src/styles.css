@@ -183,3 +183,13 @@
 .ledger-filters .ledger-actions > button { min-height: 38px; }
 .ledger-pager > label, .admin-stack .ledger-pager > label { display: flex; align-items: center; gap: 6px; margin: 0; }
 .ledger-pager select, .admin-stack .ledger-pager select { width: auto; padding: 6px; color: var(--text); background: var(--panel); border: 1px solid var(--line); border-radius: 6px; }
+
+.table-scroll { max-width: 100%; max-height: min(64vh, 44rem); scrollbar-color: var(--muted) var(--soft); }
+.table-scroll thead th { position: sticky; top: 0; z-index: 1; background: var(--panel); }
+.list-title {
+  display: block; max-width: min(34rem, 46vw); overflow: hidden; text-overflow: ellipsis;
+  white-space: nowrap; padding: 0; border: 0; background: transparent; color: inherit;
+  font: inherit; font-weight: 650; text-align: left; cursor: pointer;
+}
+.list-title:hover { text-decoration: underline; }
+.list-title:focus-visible { outline: 2px solid currentColor; outline-offset: 2px; }

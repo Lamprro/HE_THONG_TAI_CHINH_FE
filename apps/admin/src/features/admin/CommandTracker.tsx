@@ -30,7 +30,8 @@ export function CommandTracker({ id, onRun, onCommand, onAiRun }: { id: string; 
   const progress = data?.progress_json as Row | undefined; const result = data?.result_json as Row | undefined;
   const runIds = [...new Set([progress?.sourceRunId, result?.sourceRunId, result?.runId, (result?.execution as Row | undefined)?.runId, (result?.build as Row | undefined)?.runId].filter((v): v is string => typeof v === 'string'))];
   const aiRuns = new Map<string, RunLink>();
-  if (onAiRun && result) {
+  const isAiCommand = /^(FORECAST_|NEWS_|RECOVERY_)/.test(String(data?.action ?? ''));
+  if (onAiRun && isAiCommand && result) {
     const collect = (value: unknown, task?: string) => {
       const run = (value as Row | null)?.runId;
       if (typeof run === 'string') aiRuns.set(run, { id: run, task });
@@ -46,7 +47,7 @@ export function CommandTracker({ id, onRun, onCommand, onAiRun }: { id: string; 
     <p>{String(data?.reason ?? '')}</p><p className="subtle">Bắt đầu {dateTime(data?.started_at as string)} · Kết thúc {dateTime(data?.finished_at as string)}</p>
     {data?.error_message ? <p className="state-error" role="alert">{String(data.error_message)}</p> : null}
     {['REJECTED', 'VALIDATION_BLOCKED', 'COMPLETED_WITH_REJECTIONS', 'INPUT_NOT_ELIGIBLE', 'BLOCKED'].includes(outcome) && <p className="state-error">Dữ liệu chưa hoàn tất hoặc chưa đủ điều kiện. Kiểm tra luật và nguồn; tác vụ trả kết quả không đồng nghĩa dữ liệu đã sạch.</p>}
-    {onAiRun ? [...aiRuns.values()].map(run => <button className="light-button" key={run.id} onClick={() => onAiRun(run)}>Xem lượt LLM {run.id.slice(0, 8)}</button>)
+    {onAiRun && isAiCommand ? [...aiRuns.values()].map(run => <button className="light-button" key={run.id} onClick={() => onAiRun(run)}>Xem lượt LLM {run.id.slice(0, 8)}</button>)
       : runIds.map(run => <button className="light-button" key={run} onClick={() => onRun(run)}>Mở lượt chạy {run.slice(0, 8)}</button>)}
     {data?.parent_command_id ? <button className="text-button" onClick={() => onCommand(String(data.parent_command_id))}>Mở tác vụ gốc</button> : null}
     {progress && <details open><summary>Các bước đã xử lý</summary><ApiResult value={progress}/></details>}

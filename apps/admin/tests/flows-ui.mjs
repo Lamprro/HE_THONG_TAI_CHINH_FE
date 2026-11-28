@@ -37,7 +37,7 @@ await page.route('**/api/**',async route=>{const request=route.request(),url=new
   if(path==='/api/admin/console/summary')return reply({jobs:[{is_active:true,count:1}],commands:[],runs:[],versions:[],validation:[]});
   if(path==='/api/admin/console/commands/ai')return reply({content:[...commands.values()].filter(command=>command.action==='FORECAST_PREVIEW'&&command.result_json?.eligible).map(command=>({id:command.id,action:command.action,status:command.status,outcome:'READY_FOR_EXECUTION',createdAt:runSummary.createdAt})),totalElements:1});
   if(path==='/api/admin/llm/runs')return reply({content:[runSummary],totalElements:1});
-  if(path==='/api/admin/llm/runs/'+forecastRun)return reply({id:forecastRun,task_code:'FINANCIAL_SCENARIOS',status:'FAILED',model_name:'fixture-model',request_metadata:{forecast_request:{securityId:id(5)}},error_message:'PROVIDER_RATE_LIMIT',attempts:[{attempt_no:1,http_status:429}],validations:[{rule_code:'FORECAST_RULE',result_status:'FAIL'}]});
+  if(path==='/api/admin/llm/runs/'+forecastRun)return reply({id:forecastRun,task_code:'FINANCIAL_SCENARIOS',status:'FAILED',model_name:'fixture-model',request_metadata:{forecast_request:{securityId:id(5)}},error_message:'PROVIDER_RATE_LIMIT',attempts:[{attempt_no:1,http_status:429}],written_results:[{id:id(61),is_current:false,quality_status:"VALID",result_json:{overview:"Kịch bản đã lưu"}}],validations:[{rule_code:'FORECAST_RULE',result_status:'FAIL'}]});
   if(path.startsWith('/api/admin/console/commands/'))return reply(commands.get(path.split('/').at(-1))||{});
   if(path.endsWith('/data/admin_commands'))return reply({rows:[queue],total:1});
   if(path.endsWith('/data/data_versions'))return reply({rows:[pendingVersion],total:1});
@@ -78,7 +78,8 @@ try{
   await button('Chuẩn bị chạy dự báo').click();await button('Xác nhận thao tác AI').click();
   await page.getByRole('button',{name:/^Xem lượt LLM/}).click();
   const runDetail=page.getByRole('dialog',{name:'Chi tiết lượt LLM'});
-  await runDetail.getByText('Lần gọi nhà cung cấp (1)').waitFor();
+  await runDetail.getByText(/Lần gọi nhà cung cấp \(1\)/i).waitFor();
+  await runDetail.getByText('Xem dữ liệu đã ghi · Lịch sử · VALID',{exact:true}).click();
   await runDetail.getByRole('cell',{name:'429',exact:true}).waitFor();
   await runDetail.getByText('FORECAST_RULE', {exact:true}).waitFor();
   await runDetail.getByRole('button',{name:'Chạy lại',exact:true}).click();
@@ -88,9 +89,12 @@ try{
   assert.deepEqual(writes.find(w=>w.body?.action==='FORECAST_RETRY').body.input,{runId:forecastRun});
   await runDetail.getByRole('button',{name:'Close'}).click();
   await page.getByLabel('Tác vụ',{exact:true}).selectOption('FINANCIAL_SCENARIOS');
+  await button('Lọc lịch sử').click();
+  await page.getByRole('row').filter({hasText:'fixture-model'}).getByRole('button',{name:'FPT',exact:true}).click();
+  await runDetail.getByRole('button',{name:'Close'}).click();
   await page.getByRole('row').filter({hasText:'fixture-model'}).waitFor();
   await button('Lệnh quản trị AI').click();
-  await page.getByRole('row').filter({hasText:'Đầu vào sẵn sàng'}).getByRole('button',{name:'Chi tiết',exact:true}).click();
+  await page.getByRole('row').filter({hasText:'Đầu vào sẵn sàng'}).getByRole('button',{name:'Kiểm tra đầu vào',exact:true}).click();
   await button('Tiếp tục sang dự báo').click();
   assert.equal(await page.getByLabel('Chứng khoán dự báo',{exact:true}).inputValue(),id(5));
   await button('Chuẩn bị chạy dự báo').waitFor();

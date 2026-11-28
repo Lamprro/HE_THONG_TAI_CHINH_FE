@@ -1,7 +1,7 @@
 import { useRef, useState } from 'react';
 import { useMutation, useQuery } from '@tanstack/react-query';
 import { API_BASE, getJson } from '../../shared/api/client';
-import { PaginatedTable, Pagination, usePagination } from '../../shared/components/Pagination';
+import { ListTitle, PaginatedTable, Pagination, usePagination } from '../../shared/components/Pagination';
 import { Badge, Drawer, Panel, QueryState } from '../../shared/components/Ui';
 import { dateTime } from '../../shared/utils/format';
 import { CommandTracker, submitCommand, useCommand } from './CommandTracker';
@@ -16,6 +16,10 @@ const tasks: Record<string, string> = {
 const statuses: Record<string, string> = {
   PENDING: 'Chờ chạy', RUNNING: 'Đang chạy', PENDING_VALIDATION: 'Chờ kiểm tra',
   SUCCESS: 'Thành công', FAILED: 'Thất bại', REJECTED: 'Bị từ chối',
+};
+const commandStatuses: Record<string, string> = {
+  QUEUED: 'Chờ chạy', RUNNING: 'Đang chạy', SUCCEEDED: 'Đã xử lý', FAILED: 'Thất bại',
+  CANCELLED: 'Đã hủy', UNKNOWN: 'Chưa rõ kết quả', ACKNOWLEDGED: 'Đã ghi nhận',
 };
 const outcomes: Record<string, string> = {
   READY_FOR_EXECUTION: 'Đầu vào sẵn sàng', INPUT_NOT_ELIGIBLE: 'Đầu vào chưa đủ',
@@ -46,15 +50,17 @@ export function AiRunHistory({ selection, onSelect, onResumeForecast, onRecovery
   const [task, setTask] = useState('');
   const [status, setStatus] = useState('');
   const [search, setSearch] = useState('');
+  const [filters, setFilters] = useState({ task: '', status: '', search: '' });
   const [commandId, setCommandId] = useState<string | null>(null);
   const [fromCommand, setFromCommand] = useState(false);
   const { page, size, setPage, changeSize } = usePagination();
-  const params = new URLSearchParams({ page: String(page), size: String(size), task, status, search: search.trim() });
-  const runs = useQuery({ queryKey: ['llm-history', params.toString()], enabled: view === 'runs',
+  const params = new URLSearchParams({ page: String(page), size: String(size),
+    [view === 'runs' ? 'task' : 'action']: filters.task, status: filters.status, search: filters.search }).toString();
+  const runs = useQuery({ queryKey: ['llm-history', params], enabled: view === 'runs',
     queryFn: () => getJson<Page<Run>>(API_BASE, '/api/admin/llm/runs?' + params),
     refetchInterval: q => q.state.data?.content.some(row => row.status === 'RUNNING') ? 4000 : false });
-  const commands = useQuery({ queryKey: ['ai-command-history', page, size], enabled: view === 'commands',
-    queryFn: () => getJson<Page<Command>>(API_BASE, '/api/admin/console/commands/ai?page=' + page + '&size=' + size),
+  const commands = useQuery({ queryKey: ['ai-command-history', params], enabled: view === 'commands',
+    queryFn: () => getJson<Page<Command>>(API_BASE, '/api/admin/console/commands/ai?' + params),
     refetchInterval: q => q.state.data?.content.some(row => ['QUEUED', 'RUNNING'].includes(row.status)) ? 3000 : false });
   const list = view === 'runs' ? runs : commands;
   const selected = runs.data?.content.find(run => run.id === selection?.id);
@@ -62,36 +68,41 @@ export function AiRunHistory({ selection, onSelect, onResumeForecast, onRecovery
   const request = command.data?.request_json as Row | undefined;
   const previewOutcome = command.data?.result_json as Row | undefined;
   const openRun = (link: RunLink) => { setFromCommand(true); onSelect(link); };
+  const resetFilters = () => {
+    setTask(''); setStatus(''); setSearch(''); setPage(0); setFilters({ task: '', status: '', search: '' });
+  };
+  const openListRun = (run: Run) => { setFromCommand(false); onSelect({ id: run.id, task: run.taskCode }); };
 
   return <>
     <Panel title="Lịch sử LLM" action={<button className="light-button" onClick={() => void list.refetch()}>Tải lại</button>}>
       <div className="toolbar">
-        <button className={view === 'runs' ? 'primary-button' : 'light-button'} onClick={() => { setView('runs'); setPage(0); }}>Lượt chạy mô hình</button>
-        <button className={view === 'commands' ? 'primary-button' : 'light-button'} onClick={() => { setView('commands'); setPage(0); }}>Lệnh quản trị AI</button>
+        <button className={view === 'runs' ? 'primary-button' : 'light-button'} onClick={() => { if (view !== 'runs') { setView('runs'); resetFilters(); } }}>Lượt chạy mô hình</button>
+        <button className={view === 'commands' ? 'primary-button' : 'light-button'} onClick={() => { if (view !== 'commands') { setView('commands'); resetFilters(); } }}>Lệnh quản trị AI</button>
       </div>
-      {view === 'runs' && <div className="admin-form-grid">
-        <label>Tác vụ<select aria-label="Tác vụ" value={task} onChange={event => { setTask(event.target.value); setPage(0); }}>
-          <option value="">Tất cả</option>{Object.entries(tasks).map(([key, label]) => <option key={key} value={key}>{label}</option>)}
+      <form className="ledger-filters" onSubmit={event => { event.preventDefault(); setPage(0); setFilters({ task, status, search: search.trim() }); }}>
+        <label>Tác vụ<select aria-label="Tác vụ" value={task} onChange={event => setTask(event.target.value)}>
+          <option value="">Tất cả</option>{Object.entries(view === 'runs' ? tasks : actions).map(([key, label]) => <option key={key} value={key}>{label}</option>)}
         </select></label>
-        <label>Trạng thái<select aria-label="Trạng thái" value={status} onChange={event => { setStatus(event.target.value); setPage(0); }}>
-          <option value="">Tất cả</option>{Object.entries(statuses).map(([key, label]) => <option key={key} value={key}>{label}</option>)}
+        <label>Trạng thái<select aria-label="Trạng thái" value={status} onChange={event => setStatus(event.target.value)}>
+          <option value="">Tất cả</option>{Object.entries(view === 'runs' ? statuses : commandStatuses).map(([key, label]) => <option key={key} value={key}>{label}</option>)}
         </select></label>
-        <label>Tìm mã, tiêu đề hoặc ID<input value={search} maxLength={160} onChange={event => { setSearch(event.target.value); setPage(0); }}/></label>
-      </div>}
+        <label>{view === 'runs' ? 'Mã, tiêu đề hoặc ID' : 'ID, đối tượng hoặc lý do'}<input value={search} maxLength={160} onChange={event => setSearch(event.target.value)}/></label>
+        <div className="ledger-actions"><button className="primary-button">Lọc lịch sử</button><button type="button" className="light-button" onClick={resetFilters}>Xóa bộ lọc</button></div>
+      </form>
       <QueryState query={list}>
         {view === 'runs' ? <div className="table-scroll"><table>
           <thead><tr><th>Tác vụ</th><th>Mã hoặc bài viết</th><th>Trạng thái</th><th>Mô hình</th><th>Lần gọi</th><th>Tạo lúc</th><th>Thao tác</th></tr></thead>
           <tbody>{runs.data?.content.map(run => <tr key={run.id}>
-            <td>{tasks[run.taskCode] ?? run.taskCode}</td><td>{run.symbol ?? run.articleTitle ?? run.newsArticleId ?? '—'}</td>
+            <td>{tasks[run.taskCode] ?? run.taskCode}</td><td><ListTitle title={run.symbol ?? run.articleTitle ?? run.newsArticleId ?? run.id} onOpen={() => openListRun(run)}/></td>
             <td><Badge tone={runTone(run.status)}>{statuses[run.status] ?? run.status}</Badge>
-              {run.errorMessage && <div className="subtle">{run.errorMessage}</div>}</td>
+              {run.errorMessage && <div className="subtle clamp" title={run.errorMessage}>{run.errorMessage}</div>}</td>
             <td>{run.modelName ?? '—'}</td><td>{run.attemptCount}</td><td>{dateTime(run.createdAt)}</td>
-            <td><button className="text-button" onClick={() => { setFromCommand(false); onSelect({ id: run.id, task: run.taskCode }); }}>Chi tiết</button></td>
+            <td><button className="text-button" onClick={() => openListRun(run)}>Chi tiết</button></td>
           </tr>)}</tbody>
         </table></div> : <div className="table-scroll"><table>
           <thead><tr><th>Lệnh</th><th>Trạng thái</th><th>Kết quả</th><th>Tạo lúc</th><th>Thao tác</th></tr></thead>
           <tbody>{commands.data?.content.map(row => <tr key={row.id}>
-            <td>{actions[row.action] ?? row.action}</td><td><Badge tone={runTone(row.status)}>{row.status}</Badge></td>
+            <td><ListTitle title={actions[row.action] ?? row.action} onOpen={() => setCommandId(row.id)}/></td><td><Badge tone={runTone(row.status)}>{commandStatuses[row.status] ?? row.status}</Badge></td>
             <td>{row.errorMessage ?? (row.outcome ? outcomes[row.outcome] ?? row.outcome : '—')}</td><td>{dateTime(row.createdAt)}</td>
             <td><button className="text-button" onClick={() => setCommandId(row.id)}>Chi tiết</button></td>
           </tr>)}</tbody>
@@ -140,6 +151,8 @@ function AiRunDetail({ link, summary, onClose, onRecovery, onOpen }: {
     ['QUEUED', 'RUNNING'].includes(String(currentCommand.data?.status ?? 'QUEUED'));
   const validations = Array.isArray(row?.validations) ? row.validations as Row[] : [];
   const attempts = Array.isArray(row?.attempts) ? row.attempts as Row[] : [];
+  const written = Array.isArray(row?.written_results) ? row.written_results as Row[] : [];
+  const writtenArticle = row?.written_article as Row | undefined;
   const mutation = useMutation({
     mutationFn: () => submitCommand(action === 'validate' ? task === forecastTask ? 'FORECAST_REVALIDATE' : 'NEWS_REVALIDATE'
       : task === forecastTask ? 'FORECAST_RETRY' : 'NEWS_EXECUTE',
@@ -180,7 +193,8 @@ function AiRunDetail({ link, summary, onClose, onRecovery, onOpen }: {
         {mutation.error && <p role="alert">{mutation.error.message}</p>}
       </div>}
       {commandId && <CommandTracker id={commandId} onRun={() => {}} onCommand={setCommandId} onAiRun={onOpen}/>}
-      <h3>Lần gọi nhà cung cấp ({attempts.length})</h3>
+      <h3>1. Dữ liệu đầu vào và lần gọi nhà cung cấp ({attempts.length})</h3>
+      {metadata && <details><summary>Xem dữ liệu đầu vào</summary><ApiResult value={metadata.input ?? metadata}/></details>}
       {attempts.length > 0 ? <div className="table-scroll"><PaginatedTable>
         <thead><tr><th>Lần</th><th>Mô hình</th><th>HTTP</th><th>Thời lượng (ms)</th><th>Lỗi</th></tr></thead>
         <tbody>{attempts.map((attempt, index) => <tr key={String(attempt.id ?? index)}>
@@ -188,7 +202,7 @@ function AiRunDetail({ link, summary, onClose, onRecovery, onOpen }: {
             <td key={cell}>{String(value ?? '—')}</td>)}
         </tr>)}</tbody>
       </PaginatedTable></div> : <p className="subtle">Chưa có lần gọi nhà cung cấp.</p>}
-      <h3>Kết quả kiểm tra ({validations.length})</h3>
+      <h3>2. Kết quả kiểm tra ({validations.length})</h3>
       {validations.length > 0 ? <div className="table-scroll"><PaginatedTable>
         <thead><tr><th>Luật</th><th>Kết quả</th><th>Thông báo</th><th>Thời gian</th></tr></thead>
         <tbody>{validations.map((validation, index) => <tr key={String(validation.id ?? index)}>
@@ -196,6 +210,16 @@ function AiRunDetail({ link, summary, onClose, onRecovery, onOpen }: {
           <td>{String(validation.message ?? '—')}</td><td>{dateTime(validation.checked_at as string)}</td>
         </tr>)}</tbody>
       </PaginatedTable></div> : <p className="subtle">Chưa có kết quả kiểm tra.</p>}
+      <h3>3. Ghi dữ liệu</h3>
+      {written.map(result => <details key={String(result.id)}>
+        <summary>Xem dữ liệu đã ghi · {result.is_current === true ? 'Hiện hành' : 'Lịch sử'} · {String(result.quality_status ?? '—')}</summary>
+        <small>{String(result.id)} · {dateTime(String(result.created_at ?? ''))}</small>
+        <ApiResult value={result}/>
+      </details>)}
+      {writtenArticle && <details>
+        <summary>Xem bài viết đã cập nhật</summary><ApiResult value={writtenArticle}/>
+      </details>}
+      {written.length === 0 && !writtenArticle && <p className="state-empty">Chưa có dữ liệu được ghi từ lượt này.</p>}
       <details><summary>Dữ liệu và nhật ký đã lưu</summary><ApiResult value={row}/></details>
     </QueryState>
   </Drawer>;

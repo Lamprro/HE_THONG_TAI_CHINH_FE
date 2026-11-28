@@ -1,4 +1,4 @@
-import { PaginatedTable } from '../../shared/components/Pagination';
+import { ListTitle, PaginatedTable } from '../../shared/components/Pagination';
 import { useState } from 'react';
 import type { ReactNode } from 'react';
 import { statusLabels } from './dataViews';
@@ -44,7 +44,7 @@ export function Records({ rows, onRun, onRaw, actions, serverPaged }: { rows: Ro
     : keys.includes('document_id') ? ['symbol', 'period_end', 'published_on', 'report_scope', 'revision_status', 'observed_at'] : preferred;
   const columns = [...ordered.filter(k => keys.includes(k)), ...keys.filter(k => !ordered.includes(k) && !k.endsWith('_json') && !k.endsWith('_id') && k !== 'id')].slice(0, 6);
   const Table = serverPaged ? 'table' : PaginatedTable;
-  return <>{rows.length ? <div className="table-scroll"><Table><thead><tr>{columns.map(c => <th key={c}>{labels[c] ?? c.replaceAll('_', ' ')}</th>)}<th>Thao tác</th></tr></thead><tbody>{rows.map((row, n) => <tr key={String(row.id ?? n)}>{columns.map(c => <td className="record-cell" key={c} title={text(c, row[c])}>{text(c, row[c])}</td>)}<td>{actions?.(row)}<button className="text-button" onClick={() => setSelected(row)}>Chi tiết</button>{typeof row.ingestion_run_id === 'string' && onRun && <button className="text-button" onClick={() => onRun(row.ingestion_run_id as string)}>Lượt chạy</button>}{typeof row.raw_payload_id === 'string' && onRaw && <button className="text-button" onClick={() => onRaw(row.raw_payload_id as string)}>Nguồn gốc</button>}</td></tr>)}</tbody></Table></div> : <p className="state-empty">Không có bản ghi phù hợp.</p>}
+  return <>{rows.length ? <div className="table-scroll"><Table><thead><tr>{columns.map(c => <th key={c}>{labels[c] ?? c.replaceAll('_', ' ')}</th>)}<th>Thao tác</th></tr></thead><tbody>{rows.map((row, n) => <tr key={String(row.id ?? n)}>{columns.map((c, index) => <td className="record-cell" key={c} title={text(c, row[c])}>{index === 0 ? <ListTitle title={text(c, row[c])} onOpen={() => setSelected(row)}/> : text(c, row[c])}</td>)}<td>{actions?.(row)}<button className="text-button" onClick={() => setSelected(row)}>Chi tiết</button>{typeof row.ingestion_run_id === 'string' && onRun && <button className="text-button" onClick={() => onRun(row.ingestion_run_id as string)}>Lượt chạy</button>}{typeof row.raw_payload_id === 'string' && onRaw && <button className="text-button" onClick={() => onRaw(row.raw_payload_id as string)}>Nguồn gốc</button>}</td></tr>)}</tbody></Table></div> : <p className="state-empty">Không có bản ghi phù hợp.</p>}
     {selected && <Drawer title="Chi tiết bản ghi" subtitle={String(selected.id ?? '')} onClose={() => setSelected(null)}><RecordDetail row={selected}/></Drawer>}
   </>;
 }

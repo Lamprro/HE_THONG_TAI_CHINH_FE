@@ -1,6 +1,10 @@
 import { Children, isValidElement, useState, type ReactNode } from 'react';
 
 export const pageSizes = [10, 50, 100, 500];
+
+export function ListTitle({ title, onOpen }: { title: string; onOpen: () => void }) {
+  return <button type="button" className="list-title" title={title} onClick={onOpen}>{title}</button>;
+}
 export const usePagination = () => {
   const [page, setPage] = useState(0);
   const [size, setSize] = useState(10);

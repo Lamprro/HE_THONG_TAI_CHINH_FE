@@ -5,12 +5,14 @@ import { API_BASE, getJson, requestJson } from '../../shared/api/client';
 import { Drawer, Panel, QueryState } from '../../shared/components/Ui';
 import { ApiResult, Records, type Row } from './Records';
 import { CommandTracker } from './CommandTracker';
+import type { RunLink } from './AiRunHistory';
 import { statusLabels, tableStatuses, useAdminRows, versionOutput, type DataSelection } from './dataViews';
 import type { WorkflowSelection } from './WorkflowPage';
 
-export function OperationsHistory({ kind, onRun, onRaw, onWorkflow, onOutput }: {
+export function OperationsHistory({ kind, onRun, onRaw, onWorkflow, onOutput, onAiRun }: {
   kind: 'commands' | 'quality'; onRun: (id: string) => void; onRaw: (id: string) => void;
   onWorkflow: (selection: WorkflowSelection) => void; onOutput: (selection: DataSelection) => void;
+  onAiRun: (run: RunLink) => void;
 }) {
   const initial = kind === 'commands' ? 'admin_commands' : 'validation_results';
   const [table, setTable] = useState(initial); const { page, size, setPage, changeSize } = usePagination(); const [status, setStatus] = useState(''); const [query, setQuery] = useState(''); const [filter, setFilter] = useState(''); const [target, setTarget] = useState('');
@@ -36,7 +38,7 @@ export function OperationsHistory({ kind, onRun, onRaw, onWorkflow, onOutput }: 
       {table === 'validation_results' && row.result_status === 'FAIL' && <button className="text-button" onClick={() => setIssue(row)}>Ghi nhận xử lý lỗi</button>}
       {output && <button className="text-button" onClick={() => onOutput(output)}>Xem dữ liệu đã ghi</button>}
     </>; }}/><Pagination page={page} size={size} total={data.data?.total ?? 0} onPage={setPage} onSize={changeSize} busy={data.isFetching}/></QueryState>
-  </Panel>{command && <CommandTracker key={command} id={command} onRun={onRun} onCommand={setCommand}/>} {version && <SourceReview key={String(version.id)} version={version} close={() => setVersion(null)}
+  </Panel>{command && <CommandTracker key={command} id={command} onRun={onRun} onCommand={setCommand} onAiRun={onAiRun}/>} {version && <SourceReview key={String(version.id)} version={version} close={() => setVersion(null)}
     onDecided={accept => {
       setVersion(null);
       void data.refetch();
