@@ -13,6 +13,8 @@ const job={id:id(1),code:'MARKET_PRICE_BUILD',name:'Fixture price builder',dataS
 const queue={id:id(2),action:'RUN_JOB',status:'QUEUED',reason:'Queued fixture',request_json:{jobId:job.id}};
 const pendingVersion={id:id(11),version_code:'TEST-VERSION',status:'PENDING_REVIEW',notes:'Giá đóng cửa nguồn mới lệch dữ liệu hiện tại'};
 const commands=new Map([[queue.id,queue]]);const writes=[],errors=[];let count=20,promoted=false,newPrompt=null;const notes=[];
+const forecastRun=id(60);let previewEligible=false;
+const runSummary={id:forecastRun,taskCode:"FINANCIAL_SCENARIOS",status:"FAILED",symbol:"FPT",modelName:"fixture-model",attemptCount:1,errorMessage:"PROVIDER_RATE_LIMIT",createdAt:"2026-10-16T00:00:00Z"};
 const original={id:id(3),task_code:'NEWS_SUMMARY',version:'v1',enabled:true,system_prompt:'Real-shaped fixture instructions',request_schema:{type:'object'},response_schema:{required:['evidence']}};
 page.on('pageerror',e=>errors.push(e.message));
 await page.route('**/api/**',async route=>{const request=route.request(),url=new URL(request.url()),path=url.pathname,method=request.method();const reply=(body,status=200)=>route.fulfill({status,json:body,headers:{'Access-Control-Allow-Origin':'*','Access-Control-Allow-Headers':'*','Access-Control-Allow-Methods':'GET,POST,PUT,PATCH,OPTIONS'}});
@@ -20,7 +22,7 @@ await page.route('**/api/**',async route=>{const request=route.request(),url=new
   if(path==='/api/auth/login')return reply({accessToken:'fixture.jwt.admin',tokenType:'Bearer'});
   if(method!=='GET'){
     const body=request.postDataJSON();writes.push({path,method,body});
-    if(path==='/api/admin/console/commands') {const command={id:id(count++),...body,status:'SUCCEEDED',result_json:body.action==='FORECAST_PREVIEW'?{eligible:false,issues:['No verified publication history']}:{status:body.action==='RECOVERY_APPROVE'?'APPROVED':'ACTIVATED'},progress_json:body.action==='INGEST_VALIDATE_BUILD'?{stage:'COMPLETE',sourceRunId:id(10)}:null};commands.set(command.id,command);return reply({...command,status:'QUEUED'},202);}
+    if(path==='/api/admin/console/commands') {const command={id:id(count++),...body,request_json:body.input,status:'SUCCEEDED',result_json:body.action==='FORECAST_PREVIEW'?{eligible:previewEligible,issues:previewEligible?[]:['No verified publication history']}:body.action==='FORECAST_EXECUTE'?{status:'FAILED',runId:forecastRun}:{status:body.action==='RECOVERY_APPROVE'?'APPROVED':'ACTIVATED'},progress_json:body.action==='INGEST_VALIDATE_BUILD'?{stage:'COMPLETE',sourceRunId:id(10)}:null};commands.set(command.id,command);return reply({...command,status:'QUEUED'},202);}
     if(path.endsWith('/cancel')){queue.status='CANCELLED';return reply(queue);}
     if(path.endsWith('/retry')){const child={id:id(count++),status:'FAILED',action:'RUN_JOB',parent_command_id:queue.id,reason:body.reason,error_message:'Source quota 429',result_json:{category:'RATE_LIMIT'}};commands.set(child.id,child);return reply(child,202);}
     if(path.endsWith('/data-versions/'+pendingVersion.id+'/review')){pendingVersion.status=body.accept?'ACTIVE':'REJECTED';return reply(pendingVersion);}
@@ -33,6 +35,9 @@ await page.route('**/api/**',async route=>{const request=route.request(),url=new
   if(path==='/api/admin/console/session')return reply({ authenticated: true, principal: 'fixture-admin', email: null, authorities: ['ROLE_ADMIN'] });if(path==='/api/health')return reply({status:'UP'});
   if(path==='/api/ingestion-jobs')return reply([job]);if(path==='/api/data-sources')return reply([source]);if(path==='/api/securities')return reply([{id:id(5),symbol:'FPT',exchange:'HOSE',active:true}]);
   if(path==='/api/admin/console/summary')return reply({jobs:[{is_active:true,count:1}],commands:[],runs:[],versions:[],validation:[]});
+  if(path==='/api/admin/console/commands/ai')return reply({content:[...commands.values()].filter(command=>command.action==='FORECAST_PREVIEW'&&command.result_json?.eligible).map(command=>({id:command.id,action:command.action,status:command.status,outcome:'READY_FOR_EXECUTION',createdAt:runSummary.createdAt})),totalElements:1});
+  if(path==='/api/admin/llm/runs')return reply({content:[runSummary],totalElements:1});
+  if(path==='/api/admin/llm/runs/'+forecastRun)return reply({id:forecastRun,task_code:'FINANCIAL_SCENARIOS',status:'FAILED',model_name:'fixture-model',request_metadata:{forecast_request:{securityId:id(5)}},error_message:'PROVIDER_RATE_LIMIT',attempts:[{attempt_no:1,http_status:429}],validations:[{rule_code:'FORECAST_RULE',result_status:'FAIL'}]});
   if(path.startsWith('/api/admin/console/commands/'))return reply(commands.get(path.split('/').at(-1))||{});
   if(path.endsWith('/data/admin_commands'))return reply({rows:[queue],total:1});
   if(path.endsWith('/data/data_versions'))return reply({rows:[pendingVersion],total:1});
@@ -66,6 +71,30 @@ try{
   ]);
   await button('Ghi nhận xử lý lỗi').click();await page.getByLabel('Ghi chú xử lý',{exact:true}).fill('Investigating source mapping; FAIL retained');await button('Lưu ghi chú').click();await page.getByText('Investigating source mapping; FAIL retained',{exact:true}).waitFor();await button('Close').click();
   await button('Vận hành AI').click();assert.equal(await button('Chuẩn bị chạy dự báo').isDisabled(),true);await page.getByLabel('Chứng khoán dự báo',{exact:true}).selectOption(id(5));await page.getByLabel('Ngày chốt dữ liệu dự báo',{exact:true}).fill('2026-10-16');await page.getByLabel('Lý do thao tác AI',{exact:true}).fill('Preview without model calls');await button('Kiểm tra dữ liệu đầu vào').click();await button('Xác nhận thao tác AI').click();await page.getByText('Kết quả nghiệp vụ: INPUT_NOT_ELIGIBLE',{exact:true}).waitFor();assert.equal(await button('Chuẩn bị chạy dự báo').isDisabled(),true);
+  previewEligible=true;
+  await button('Kiểm tra dữ liệu đầu vào').click();await button('Xác nhận thao tác AI').click();
+  await page.getByText('Đầu vào sẵn sàng. Bấm Chuẩn bị chạy dự báo rồi xác nhận để gọi LLM.').waitFor();
+  assert.equal(writes.filter(w=>w.body?.action==='FORECAST_EXECUTE').length,0);
+  await button('Chuẩn bị chạy dự báo').click();await button('Xác nhận thao tác AI').click();
+  await page.getByRole('button',{name:/^Xem lượt LLM/}).click();
+  const runDetail=page.getByRole('dialog',{name:'Chi tiết lượt LLM'});
+  await runDetail.getByText('Lần gọi nhà cung cấp (1)').waitFor();
+  await runDetail.getByRole('cell',{name:'429',exact:true}).waitFor();
+  await runDetail.getByText('FORECAST_RULE', {exact:true}).waitFor();
+  await runDetail.getByRole('button',{name:'Chạy lại',exact:true}).click();
+  await runDetail.getByLabel('Lý do',{exact:true}).fill('Retry reviewed provider failure');
+  await runDetail.getByRole('button',{name:'Xác nhận',exact:true}).click();
+  await runDetail.getByRole('heading',{name:'Tiến trình và kết quả'}).waitFor();
+  assert.deepEqual(writes.find(w=>w.body?.action==='FORECAST_RETRY').body.input,{runId:forecastRun});
+  await runDetail.getByRole('button',{name:'Close'}).click();
+  await page.getByLabel('Tác vụ',{exact:true}).selectOption('FINANCIAL_SCENARIOS');
+  await page.getByRole('row').filter({hasText:'fixture-model'}).waitFor();
+  await button('Lệnh quản trị AI').click();
+  await page.getByRole('row').filter({hasText:'Đầu vào sẵn sàng'}).getByRole('button',{name:'Chi tiết',exact:true}).click();
+  await button('Tiếp tục sang dự báo').click();
+  assert.equal(await page.getByLabel('Chứng khoán dự báo',{exact:true}).inputValue(),id(5));
+  await button('Chuẩn bị chạy dự báo').waitFor();
+  assert.equal(await button('Chuẩn bị chạy dự báo').isEnabled(),true);
   await button('Khôi phục & duyệt').click();await button('Chọn để đọc và duyệt').click();await page.getByLabel('Người duyệt',{exact:true}).fill('Admin fixture');await page.getByLabel('Lý do thao tác AI',{exact:true}).fill('Reviewed recovery proposal');await button('Chuẩn bị duyệt đề xuất').click();await button('Xác nhận thao tác AI').click();await page.getByText('Kết quả nghiệp vụ: APPROVED',{exact:true}).waitFor();assert.equal(writes.some(w=>w.body?.action==='RECOVERY_ANALYZE'),false);
   await button('Prompt & cấu hình').click();await button('Chọn template').click();await button('Lấy nội dung bản gốc để sửa').click();await page.getByLabel('Version prompt mới',{exact:true}).fill('v2');await page.getByLabel('Lý do thay đổi prompt',{exact:true}).fill('Reviewed immutable version');await button('Xem lại version mới').click();await button('Xác nhận thay đổi prompt').click();await button('Chuẩn bị bật version').waitFor();assert.equal(newPrompt.enabled,false);await button('Chuẩn bị bật version').click();await button('Xác nhận thay đổi prompt').click();await button('Chuẩn bị tắt version').waitFor();assert.equal(promoted,true);
   // A click finishes before the mutation response and React's next render.

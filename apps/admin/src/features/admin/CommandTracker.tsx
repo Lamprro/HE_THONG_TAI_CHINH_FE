@@ -4,6 +4,7 @@ import { API_BASE, getJson, requestJson } from '../../shared/api/client';
 import { Badge, Panel, QueryState } from '../../shared/components/Ui';
 import { ApiResult, type Row } from './Records';
 import { dateTime, safeObject } from '../../shared/utils/format';
+import type { RunLink } from './AiRunHistory';
 
 const finished = (status: unknown) => !['QUEUED', 'RUNNING'].includes(String(status));
 /** Polls one durable command; when it finishes while watched, data views are refreshed because the native work may have written runs, versions or master data. */
@@ -11,15 +12,16 @@ export function useCommand(id: string | null | undefined) {
   const client = useQueryClient();
   const query = useQuery({ queryKey: ['admin-command', id], queryFn: () => getJson<Row>(API_BASE, `/api/admin/console/commands/${encodeURIComponent(id!)}`), enabled: !!id,
     refetchInterval: q => q.state.data && !finished(q.state.data.status) ? 2000 : false });
-  const status = query.data?.status; const previous = useRef<unknown>(undefined);
+  const status = query.data?.status; const previous = useRef<{id: typeof id; status: unknown} | null>(null);
   useEffect(() => {
-    const before = previous.current; previous.current = status;
-    if (before !== undefined && status !== undefined && !finished(before) && finished(status)) void client.invalidateQueries({ predicate: q => q.queryKey[0] !== 'admin-command' });
-  }, [status, client]);
+    const before = previous.current; previous.current = { id, status };
+    if (status !== undefined && finished(status) && (before?.id !== id || before?.status !== status))
+      void client.invalidateQueries({ predicate: q => q.queryKey[0] !== 'admin-command' });
+  }, [id, status, client]);
   return query;
 }
 export const submitCommand = (action: string, input: unknown, reason: string, idempotencyKey: string) => requestJson<Row>(API_BASE, '/api/admin/console/commands', 'POST', { action, input, reason, idempotencyKey });
-export function CommandTracker({ id, onRun, onCommand }: { id: string; onRun: (id: string) => void; onCommand: (id: string) => void }) {
+export function CommandTracker({ id, onRun, onCommand, onAiRun }: { id: string; onRun: (id: string) => void; onCommand: (id: string) => void; onAiRun?: (run: RunLink) => void }) {
   const [reason, setReason] = useState(''); const [review, setReview] = useState<string | null>(null);
   const key = useRef(crypto.randomUUID()); const sending = useRef(false); const client = useQueryClient();
   const command = useCommand(id);
@@ -27,6 +29,16 @@ export function CommandTracker({ id, onRun, onCommand }: { id: string; onRun: (i
   const data = command.data;
   const progress = data?.progress_json as Row | undefined; const result = data?.result_json as Row | undefined;
   const runIds = [...new Set([progress?.sourceRunId, result?.sourceRunId, result?.runId, (result?.execution as Row | undefined)?.runId, (result?.build as Row | undefined)?.runId].filter((v): v is string => typeof v === 'string'))];
+  const aiRuns = new Map<string, RunLink>();
+  if (onAiRun && result) {
+    const collect = (value: unknown, task?: string) => {
+      const run = (value as Row | null)?.runId;
+      if (typeof run === 'string') aiRuns.set(run, { id: run, task });
+    };
+    collect(result);
+    for (const [task, value] of Object.entries(result)) if (task.startsWith('NEWS_')) collect(value, task);
+    if (Array.isArray(result)) result.forEach(value => collect(value));
+  }
   const outcome = String(typeof result?.eligible === 'boolean' ? result.eligible ? 'READY_FOR_EXECUTION' : 'INPUT_NOT_ELIGIBLE' : result?.status ?? (result?.build as Row | undefined)?.status ?? '');
   const execute = async () => { if (sending.current || !reason.trim()) return; sending.current = true; try { await mutation.mutateAsync(); } catch { /* Retain key for uncertain transport outcomes. */ } finally { sending.current = false; } };
   return <Panel title="Tiến trình và kết quả" note={id}><QueryState query={command}>
@@ -34,7 +46,8 @@ export function CommandTracker({ id, onRun, onCommand }: { id: string; onRun: (i
     <p>{String(data?.reason ?? '')}</p><p className="subtle">Bắt đầu {dateTime(data?.started_at as string)} · Kết thúc {dateTime(data?.finished_at as string)}</p>
     {data?.error_message ? <p className="state-error" role="alert">{String(data.error_message)}</p> : null}
     {['REJECTED', 'VALIDATION_BLOCKED', 'COMPLETED_WITH_REJECTIONS', 'INPUT_NOT_ELIGIBLE', 'BLOCKED'].includes(outcome) && <p className="state-error">Dữ liệu chưa hoàn tất hoặc chưa đủ điều kiện. Kiểm tra luật và nguồn; tác vụ trả kết quả không đồng nghĩa dữ liệu đã sạch.</p>}
-    {runIds.map(run => <button className="light-button" key={run} onClick={() => onRun(run)}>Mở lượt chạy {run.slice(0, 8)}</button>)}
+    {onAiRun ? [...aiRuns.values()].map(run => <button className="light-button" key={run.id} onClick={() => onAiRun(run)}>Xem lượt LLM {run.id.slice(0, 8)}</button>)
+      : runIds.map(run => <button className="light-button" key={run} onClick={() => onRun(run)}>Mở lượt chạy {run.slice(0, 8)}</button>)}
     {data?.parent_command_id ? <button className="text-button" onClick={() => onCommand(String(data.parent_command_id))}>Mở tác vụ gốc</button> : null}
     {progress && <details open><summary>Các bước đã xử lý</summary><ApiResult value={progress}/></details>}
     {result && <details open><summary>Kết quả từ dịch vụ gốc</summary><ApiResult value={result}/></details>}
