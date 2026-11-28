@@ -869,3 +869,44 @@ td.flash { animation: flash 1.2s ease-out; }
   line-height: 1.5;
   color: #b9cadc;
 }
+
+.financial-scenario-dialog {
+  width: min(100%, 960px);
+  max-width: 960px;
+  max-height: 90dvh;
+}
+.financial-scenario-dialog .ai-modal-header { align-items: flex-start; gap: 12px; }
+.financial-scenario-dialog .ai-modal-header h2 {
+  display: flex; align-items: center; gap: 8px; margin: 9px 0 4px; font-size: clamp(1.1rem, 2.5vw, 1.55rem);
+}
+.financial-scenario-dialog .ai-modal-header p { margin: 0; }
+.financial-scenario-dialog .ai-modal-body { min-height: 0; overscroll-behavior: contain; }
+.financial-scenario-dialog .ai-modal-footer {
+  padding: 12px 20px;
+  border-top: 1px solid #22344a;
+  margin: 0;
+}
+.financial-scenario-dialog .ai-modal-footer button { flex-shrink: 0; }
+.scenarios-matrix { display: grid; gap: 16px; }
+.metric-scenario-group { padding: 16px; border: 1px solid #27384e; border-radius: 12px; background: #111d2a; }
+.metric-scenario-heading, .scenario-col-header {
+  display: flex; justify-content: space-between; align-items: baseline; gap: 8px 16px; flex-wrap: wrap;
+}
+.metric-scenario-heading h3 { margin: 0; font-size: 1rem; }
+.metric-scenario-heading > div { display: flex; gap: 6px 10px; flex-wrap: wrap; font-size: .83rem; }
+.metric-scenario-heading span, .scenario-value small { color: #a8bdd1; }
+.financial-scenario-dialog .three-scenarios-grid { grid-template-columns: repeat(3, minmax(0, 1fr)); margin-top: 12px; }
+.financial-scenario-dialog .scenario-col { min-width: 0; }
+.financial-scenario-dialog .scenario-col h4 { margin: 0; display: flex; align-items: center; gap: 6px; font-size: .9rem; }
+.financial-scenario-dialog .scenario-growth { white-space: nowrap; }
+.scenario-value { display: grid; gap: 2px; font-variant-numeric: tabular-nums; }
+.scenario-value strong { font-size: clamp(.9rem, 1.9vw, 1.18rem); overflow-wrap: anywhere; }
+.financial-scenario-dialog .scenario-col details { margin-top: 2px; }
+.financial-scenario-dialog .scenario-col summary { cursor: pointer; font-size: .82rem; color: #b9cadc; }
+.financial-scenario-dialog .scenario-rationale { margin-top: 6px; overflow-wrap: anywhere; }
+@media (max-width: 680px) {
+  .financial-scenario-dialog .three-scenarios-grid { grid-template-columns: 1fr; }
+  .financial-scenario-dialog .ai-modal-body, .financial-scenario-dialog .ai-modal-header,
+  .financial-scenario-dialog .ai-modal-footer { padding-inline: 12px; }
+  .metric-scenario-group { padding: 12px; }
+}

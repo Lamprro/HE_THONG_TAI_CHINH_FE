@@ -106,7 +106,6 @@ export function AiNewsAnalysisModal({
                     <blockquote key={i} className="quote-box">
                       <Quote size={13} className="quote-icon" />
                       <span>{ev.quote}</span>
-                      {ev.segment_id && <small className="segment-tag">[{ev.segment_id}]</small>}
                     </blockquote>
                   ))}
                 </div>
@@ -133,7 +132,6 @@ export function AiNewsAnalysisModal({
                           <blockquote key={evIdx} className="quote-box">
                             <Quote size={13} className="quote-icon" />
                             <span>{ev.quote}</span>
-                            {ev.segment_id && <small className="segment-tag">[{ev.segment_id}]</small>}
                           </blockquote>
                         ))}
                       </div>

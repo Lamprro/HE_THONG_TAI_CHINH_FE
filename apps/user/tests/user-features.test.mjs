@@ -119,7 +119,7 @@ test('parseAiData parses JSON string from LLM news summary and extracts sections
   assert.ok(parsed.overview?.includes('Đắk Lắk'));
   assert.equal(parsed.sections?.length, 2);
   assert.equal(parsed.sections?.[0].heading, 'Làm việc giữa tỉnh Đắk Lắk và Tập đoàn Hòa Phát');
-  assert.equal(parsed.sections?.[0].evidence?.[0].segment_id, 'p1');
+  assert.equal(parsed.sections?.[0].evidence?.[0].segment_id, undefined);
   assert.equal(parsed.company_impacts?.length, 1);
   assert.equal(parsed.company_impacts?.[0].symbol, 'HPG');
   assert.equal(parsed.company_impacts?.[0].direction, 'POSITIVE');
@@ -141,12 +141,14 @@ test('parseAiData safely handles object, plain string, and invalid inputs', () =
 
 test('parseScenarioData reads the published forecast and keeps separate limitations', () => {
   const parsed = parseScenarioData({
-    forecasts: [{metric_code: 'STOCK_PRICE', bear: {growth_percent: '-2.5'},
+    forecasts: [{metric_code: 'STOCK_PRICE', bear: {growth_percent: '-2.5',
+      rationale: 'Mức 12.500 theo FSI:2f03bff7-4ae0-45a6-bed4-d6842bbaba66 và PRICE:73017.'},
       base: {growth_percent: '0'}, bull: {growth_percent: '3.25'}}],
     calculated_values: [{metric_code: 'STOCK_PRICE', base_value: '123456.78000000', unit: 'VND'}],
     limitations: ['Report scope UNKNOWN: consolidation cannot be assumed.', 'Một lưu ý khác.'],
   });
   assert.equal(parsed.scenarios[0].bull.growth_percent, '3.25');
+  assert.equal(parsed.scenarios[0].bear.rationale, 'Mức 12.500 theo dữ liệu nguồn.');
   assert.equal(parsed.calculatedValues[0].base_value, '123456.78000000');
   assert.deepEqual(parsed.limitations, ['Chưa xác định báo cáo là hợp nhất hay riêng lẻ.', 'Một lưu ý khác.']);
 });

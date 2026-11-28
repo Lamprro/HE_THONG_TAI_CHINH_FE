@@ -1,4 +1,4 @@
-import { useState } from 'react';
+import { useEffect, useId, useRef, useState } from 'react';
 import { Bot, BookOpen, X, TrendingUp, TrendingDown, Target, ShieldCheck, Sparkles, AlertCircle } from 'lucide-react';
 import { date, decimal, text } from '../shared/format';
 import {
@@ -23,6 +23,12 @@ const metricNames: Record<string, string> = {
   LIABILITIES: 'Nợ phải trả',
   STOCK_PRICE: 'Giá cổ phiếu',
 };
+
+const scenarios = [
+  { key: 'bear', name: 'Thận trọng', Icon: TrendingDown },
+  { key: 'base', name: 'Cơ sở', Icon: Target },
+  { key: 'bull', name: 'Khả quan', Icon: TrendingUp },
+] as const;
 
 function scopeLabel(value: unknown) {
   if (value === 'CONSOLIDATED') return 'Hợp nhất';
@@ -49,34 +55,40 @@ export function FinancialScenarioModal({
   const period = row.forecastPeriodStart && row.forecastPeriodEnd
     ? date(String(row.forecastPeriodStart)) + ' – ' + date(String(row.forecastPeriodEnd))
     : data.horizon_period;
+  const titleId = useId();
+  const closeButton = useRef<HTMLButtonElement>(null);
+  useEffect(() => {
+    const previous = document.activeElement;
+    closeButton.current?.focus();
+    return () => { if (previous instanceof HTMLElement) previous.focus(); };
+  }, []);
 
   return (
     <div className="dialog-backdrop" role="presentation" onClick={onClose}>
       <div
-        className="dialog large ai-analysis-dialog"
+        className="dialog large ai-analysis-dialog financial-scenario-dialog"
         role="dialog"
         aria-modal="true"
-        aria-label="Chi tiết kịch bản tài chính AI"
+        aria-labelledby={titleId}
         onClick={e => e.stopPropagation()}
+        onKeyDown={event => { if (event.key === 'Escape') onClose(); }}
       >
         <div className="ai-modal-header">
-          <div className="header-meta">
-            <span className="ai-brand-tag"><Bot size={15} /> Kịch bản tài chính AI</span>
+          <div><div className="header-meta">
             <span className="task-pill">{symbol} · {exchange}</span>
             {scope && <span className="task-pill scope">{scope}</span>}
             <span className={`quality-chip ${quality === 'VALID' ? 'valid' : 'warning'}`}>
               <ShieldCheck size={13} /> {quality === 'VALID' ? 'Đạt kiểm tra dữ liệu' : quality === 'WARNING' ? 'Có cảnh báo' : quality}
             </span>
           </div>
-          <button className="icon-button close-button" onClick={onClose} aria-label="Đóng popup">
+          <h2 id={titleId}><Bot size={19} aria-hidden="true"/> Kịch bản tài chính</h2>
+          {period && <p className="muted">Kỳ dự báo {period}</p>}</div>
+          <button ref={closeButton} className="icon-button close-button" onClick={onClose} aria-label="Đóng popup">
             <X size={18} />
           </button>
         </div>
 
-        <h2 className="ai-modal-title">Dự phóng kịch bản tài chính cho {symbol}</h2>
-
         <div className="ai-modal-body">
-          {period && <p className="muted">Kỳ dự báo {period}</p>}
           {data.overview && (
             <div className="ai-overview-box">
               <div className="overview-title">
@@ -92,50 +104,27 @@ export function FinancialScenarioModal({
               {data.scenarios.map(sc => {
                 const calculated = data.calculatedValues?.find(value => value.metric_code === sc.metric_code);
                 const unit = calculated?.unit === 'VND_PER_SHARE' ? 'VND/cổ phiếu' : calculated?.unit;
-                return <div key={sc.metric_code} className="metric-scenario-group">
-                  <h3 className="metric-title">{metricNames[sc.metric_code] || sc.metric_code}</h3>
-                  {calculated?.base_value != null && <p className="muted">Giá trị gốc {decimal(calculated.base_value)} {unit}</p>}
-                  <div className="three-scenarios-grid">
-                    {/* Bear */}
-                    <div className="scenario-col bear">
-                      <div className="scenario-col-header">
-                        <TrendingDown size={14} />
-                        <strong>Thận trọng (Bear)</strong>
-                        <span className="growth-tag negative">
-                          {growthLabel(sc.bear.growth_percent)}
-                        </span>
-                      </div>
-                      <p className="scenario-rationale">{sc.bear.rationale}</p>
-                      {calculated?.bear != null && <p>{decimal(calculated.bear)} {unit}</p>}
-                    </div>
-
-                    {/* Base */}
-                    <div className="scenario-col base">
-                      <div className="scenario-col-header">
-                        <Target size={14} />
-                        <strong>Cơ sở (Base)</strong>
-                        <span className="growth-tag neutral">
-                          {growthLabel(sc.base.growth_percent)}
-                        </span>
-                      </div>
-                      <p className="scenario-rationale">{sc.base.rationale}</p>
-                      {calculated?.base != null && <p>{decimal(calculated.base)} {unit}</p>}
-                    </div>
-
-                    {/* Bull */}
-                    <div className="scenario-col bull">
-                      <div className="scenario-col-header">
-                        <TrendingUp size={14} />
-                        <strong>Khả quan (Bull)</strong>
-                        <span className="growth-tag positive">
-                          {growthLabel(sc.bull.growth_percent)}
-                        </span>
-                      </div>
-                      <p className="scenario-rationale">{sc.bull.rationale}</p>
-                      {calculated?.bull != null && <p>{decimal(calculated.bull)} {unit}</p>}
-                    </div>
+                return <article key={sc.metric_code} className="metric-scenario-group">
+                  <div className="metric-scenario-heading">
+                    <h3>{metricNames[sc.metric_code] || sc.metric_code}</h3>
+                    {calculated?.base_value != null && <div><span>Giá trị gốc</span>
+                      <strong>{decimal(calculated.base_value)} {unit}</strong></div>}
                   </div>
-                </div>;
+                  <div className="three-scenarios-grid">
+                    {scenarios.map(({ key, name, Icon }) => <section key={key} className={'scenario-col ' + key}>
+                      <div className="scenario-col-header">
+                        <h4><Icon size={16} aria-hidden="true"/>{name}</h4>
+                        <span className="scenario-growth">{growthLabel(sc[key].growth_percent)}</span>
+                      </div>
+                      {calculated?.[key] != null && <div className="scenario-value">
+                        <strong>{decimal(calculated[key])}</strong>{unit && <small>{unit}</small>}
+                      </div>}
+                      {sc[key].rationale && <details><summary>Giải thích</summary>
+                        <p className="scenario-rationale">{sc[key].rationale}</p>
+                      </details>}
+                    </section>)}
+                  </div>
+                </article>;
               })}
             </div>
           )}
@@ -147,14 +136,14 @@ export function FinancialScenarioModal({
             </div>
           )}
 
-          <div className="ai-modal-footer">
+        </div>
+        <div className="ai-modal-footer">
             <small className="ai-disclaimer">
               Các giá trị là kịch bản tham khảo và chưa được kiểm chứng về độ chính xác dự báo.
             </small>
             <button type="button" className="primary" onClick={onClose}>
               Đóng cửa sổ
             </button>
-          </div>
         </div>
       </div>
     </div>
@@ -163,7 +152,6 @@ export function FinancialScenarioModal({
 
 export function FinancialScenarioCard({ row }: { row: Record<string, unknown> }) {
   const [showModal, setShowModal] = useState(false);
-  const symbol = text(row.symbol, '');
   const asOf = text(row.asOfDate, '');
   const pStart = text(row.forecastPeriodStart, '');
   const pEnd = text(row.forecastPeriodEnd, '');

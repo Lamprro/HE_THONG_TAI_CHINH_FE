@@ -32,7 +32,7 @@ export function NewsPage({ symbol, exchange }: { symbol?: string; exchange?: str
 function NewsAnalysis({ id, articleTitle }: { id: string; articleTitle?: string }) {
   const query = useQuery({ queryKey: ['news-analysis', id], staleTime: 900_000, queryFn: ({ signal }) => apiData<Row[]>('newsAnalysis', [id], {}, signal) });
   return <section className="panel"><div className="panel-heading"><div><h2><Bot size={16} />Phân tích AI của bài</h2><span className="muted">Chỉ kết quả đã qua kiểm định và còn khớp nội dung nguồn</span></div></div>
-    <QueryState loading={query.isPending} error={query.error} retry={query.refetch}>{query.data?.data.length ? <div className="analysis-list">{query.data.data.map((row, i) => <AiNewsAnalysisCard key={text(row.id, String(i))} row={row} articleTitle={articleTitle} />)}</div> : <div className="state"><strong>Chưa có phân tích được công bố cho bài này</strong><span>Trang không tự gọi mô hình để tạo phân tích.</span></div>}</QueryState>
+    <QueryState loading={query.isPending} error={query.error} retry={query.refetch}>{query.data?.data.length ? <div className="analysis-list">{query.data.data.map((row, i) => <AiNewsAnalysisCard key={[row.task, row.createdAt, i].join(':')} row={row} articleTitle={articleTitle} />)}</div> : <div className="state"><strong>Chưa có phân tích được công bố cho bài này</strong><span>Trang không tự gọi mô hình để tạo phân tích.</span></div>}</QueryState>
   </section>;
 }
 

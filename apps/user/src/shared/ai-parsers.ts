@@ -1,5 +1,4 @@
 export type EvidenceItem = {
-  segment_id?: string;
   quote: string;
 };
 
@@ -11,12 +10,18 @@ export type AnalysisSection = {
 };
 
 export type CompanyImpact = {
-  company_id?: string;
   symbol?: string;
   direction: string;
   rationale: string;
   confidence?: string;
 };
+
+function cleanAiText(value: string) {
+  return value
+    .replace(/\b(?:[a-z][a-z0-9_-]*:\s*)?[\da-f]{8}(?:-[\da-f]{4}){3}-[\da-f]{12}\b/gi, 'dữ liệu nguồn')
+    .replace(/\b(?:FSI|PRICE|METRIC|MACRO):\s*\d+\b/gi, 'dữ liệu nguồn')
+    .replace(/dữ liệu nguồn(?:(?:,\s*|\s+(?:và|and)\s+)dữ liệu nguồn)+/g, 'dữ liệu nguồn');
+}
 
 export type FinancialFact = {
   metric_name: string;
@@ -45,13 +50,16 @@ export function parseAiData(raw: unknown): ParsedNewsAiData {
   if (!raw) return {};
   if (typeof raw === 'string') {
     try {
-      return JSON.parse(raw) as ParsedNewsAiData;
+      return parseAiData(JSON.parse(raw));
     } catch {
-      return { overview: raw };
+      return { overview: cleanAiText(raw) };
     }
   }
   if (typeof raw === 'object') {
-    return raw as ParsedNewsAiData;
+    return JSON.parse(JSON.stringify(raw), (key, value) => {
+      if (/(?:^|_)(?:id|ids|uuid|uuids)$/i.test(key.replace(/([a-z0-9])([A-Z])/g, '$1_$2'))) return undefined;
+      return typeof value === 'string' ? cleanAiText(value) : value;
+    }) as ParsedNewsAiData;
   }
   return {};
 }
@@ -59,12 +67,10 @@ export function parseAiData(raw: unknown): ParsedNewsAiData {
 export type ScenarioDetail = {
   growth_percent: number | string;
   rationale: string;
-  evidence_ids?: string[];
 };
 
 export type ScenarioMetric = {
   metric_code: string;
-  base_point_id?: string;
   bear: ScenarioDetail;
   base: ScenarioDetail;
   bull: ScenarioDetail;
@@ -92,7 +98,7 @@ export function parseScenarioData(raw: unknown): ParsedScenarioData {
     try {
       return parseScenarioData(JSON.parse(raw));
     } catch {
-      return { overview: raw };
+      return { overview: cleanAiText(raw) };
     }
   }
   if (!raw || typeof raw !== 'object' || Array.isArray(raw)) return {};
@@ -100,7 +106,7 @@ export function parseScenarioData(raw: unknown): ParsedScenarioData {
   const warnings = Array.isArray(row.limitations) ? row.limitations : [row.limitations];
   const limitations = warnings.filter((item): item is string => typeof item === 'string' && !!item.trim())
     .map(item => {
-      const value = item.trim();
+      const value = cleanAiText(item.trim());
       if (value.startsWith('Report scope UNKNOWN')) return 'Chưa xác định báo cáo là hợp nhất hay riêng lẻ.';
       if (value.startsWith('Profit period values are provider-reported')) return 'Chưa xác minh lợi nhuận là số riêng quý hay lũy kế.';
       if (value.startsWith('Stock price scenario uses unadjusted nominal')) return 'Kịch bản dùng giá đóng cửa chưa điều chỉnh, không dự phóng cổ tức và các sự kiện doanh nghiệp.';
@@ -109,13 +115,18 @@ export function parseScenarioData(raw: unknown): ParsedScenarioData {
     });
   const scenarios = Array.isArray(row.forecasts) ? row.forecasts : row.scenarios;
   return {
-    overview: typeof row.overview === 'string' ? row.overview : undefined,
+    overview: typeof row.overview === 'string' ? cleanAiText(row.overview) : undefined,
     horizon_period: typeof row.horizon_period === 'string' ? row.horizon_period : undefined,
     scenarios: Array.isArray(scenarios) ? scenarios.filter(item =>
       item && typeof item.metric_code === 'string' && ['bear', 'base', 'bull'].every(key => {
         const value = item[key]?.growth_percent;
         return typeof value === 'number' && Number.isFinite(value) ||
           typeof value === 'string' && /^-?\d+(\.\d+)?$/.test(value);
+      })).map(item => ({
+        metric_code: item.metric_code,
+        bear: { growth_percent: item.bear.growth_percent, rationale: cleanAiText(String(item.bear.rationale ?? '')) },
+        base: { growth_percent: item.base.growth_percent, rationale: cleanAiText(String(item.base.rationale ?? '')) },
+        bull: { growth_percent: item.bull.growth_percent, rationale: cleanAiText(String(item.bull.rationale ?? '')) },
       })) : [],
     calculatedValues: Array.isArray(row.calculated_values) ? row.calculated_values : [],
     limitations: [...new Set(limitations)],
